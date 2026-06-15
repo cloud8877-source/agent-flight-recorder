@@ -1,4 +1,4 @@
-.PHONY: setup dev collector web demo db-init lint venv test regression policy-test
+.PHONY: setup dev collector web demo db-init lint venv test regression policy-test prod-up storage-test
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -45,3 +45,10 @@ regression: test
 policy-test: venv
 	chmod +x scripts/policy-e2e.sh
 	./scripts/policy-e2e.sh
+
+prod-up:
+	docker compose -f infra/docker-compose.prod.yml up --build
+
+storage-test: venv
+	chmod +x scripts/storage-e2e.sh
+	./scripts/storage-e2e.sh

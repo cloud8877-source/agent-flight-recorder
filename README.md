@@ -73,6 +73,8 @@ Run CI regression tests (Phase 2):
 ```bash
 make test
 make policy-test
+make storage-test   # requires Docker (Postgres + ClickHouse + MinIO)
+make prod-up        # production compose stack
 ```
 
 CLI examples:
@@ -128,7 +130,7 @@ ClickHouse/Postgres storage, hosted cloud, team accounts, SSO/RBAC, Slack alerts
 | **1** | Local trace capture ✅ | Capture agent run locally; inspect model/tool calls; cost/latency/redaction/search/replay/eval; `make e2e` passes |
 | **2** | Replay & regression ✅ | `afr` CLI; model replay; `afr test` CI gate; GitHub Actions regression workflow |
 | **3** | Policy & risk ✅ | Policy YAML; tool risk + PII detection; violation UI; `make policy-test` |
-| **4** | Production storage & export | Postgres + ClickHouse + object storage; OTLP and third-party exporters |
+| **4** | Production storage & export ✅ | Postgres + ClickHouse + MinIO; OTLP/Langfuse/Phoenix export; `make storage-test` |
 
 ## Key Architectural Bet
 

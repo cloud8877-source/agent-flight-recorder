@@ -1,19 +1,16 @@
--- Agent Flight Recorder SQLite schema v1 (local development mode)
--- See ADR-002 (stub) and ADR-001 Section 9.5
-
-PRAGMA foreign_keys = ON;
+-- Agent Flight Recorder Postgres schema (production metadata store)
 
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS environments (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id),
   name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS agents (
@@ -21,7 +18,7 @@ CREATE TABLE IF NOT EXISTS agents (
   project_id TEXT NOT NULL REFERENCES projects(id),
   name TEXT NOT NULL,
   version TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS agent_runs (
@@ -34,12 +31,12 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   session_id TEXT,
   environment TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'success', 'failed')),
-  started_at TEXT NOT NULL,
-  ended_at TEXT,
+  started_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
   input_json TEXT,
   output_json TEXT,
   metrics_json TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS spans (
@@ -50,11 +47,11 @@ CREATE TABLE IF NOT EXISTS spans (
   span_type TEXT NOT NULL,
   name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'error')),
-  started_at TEXT NOT NULL,
-  ended_at TEXT,
+  started_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
   attributes_json TEXT,
   blob_refs_json TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS model_calls (
@@ -65,10 +62,10 @@ CREATE TABLE IF NOT EXISTS model_calls (
   model TEXT NOT NULL,
   input_tokens INTEGER,
   output_tokens INTEGER,
-  cost_usd REAL,
+  cost_usd DOUBLE PRECISION,
   latency_ms INTEGER,
-  started_at TEXT NOT NULL,
-  ended_at TEXT,
+  started_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
   attributes_json TEXT
 );
 
@@ -81,25 +78,18 @@ CREATE TABLE IF NOT EXISTS tool_calls (
   status TEXT NOT NULL DEFAULT 'success',
   risk_level TEXT,
   latency_ms INTEGER,
-  started_at TEXT NOT NULL,
-  ended_at TEXT,
+  started_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
   arguments_json TEXT,
   result_json TEXT
 );
-
-CREATE INDEX IF NOT EXISTS idx_agent_runs_trace_id ON agent_runs(trace_id);
-CREATE INDEX IF NOT EXISTS idx_agent_runs_user_id ON agent_runs(user_id);
-CREATE INDEX IF NOT EXISTS idx_agent_runs_started_at ON agent_runs(started_at);
-CREATE INDEX IF NOT EXISTS idx_spans_agent_run_id ON spans(agent_run_id);
-CREATE INDEX IF NOT EXISTS idx_model_calls_agent_run_id ON model_calls(agent_run_id);
-CREATE INDEX IF NOT EXISTS idx_tool_calls_agent_run_id ON tool_calls(agent_run_id);
 
 CREATE TABLE IF NOT EXISTS replay_snapshots (
   id TEXT PRIMARY KEY,
   agent_run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
   snapshot_json TEXT,
   snapshot_blob_key TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS replay_runs (
@@ -108,8 +98,8 @@ CREATE TABLE IF NOT EXISTS replay_runs (
   snapshot_id TEXT NOT NULL REFERENCES replay_snapshots(id),
   mode TEXT NOT NULL DEFAULT 'exact',
   status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'success', 'failed')),
-  created_at TEXT NOT NULL,
-  completed_at TEXT,
+  created_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
   result_json TEXT
 );
 
@@ -118,16 +108,11 @@ CREATE TABLE IF NOT EXISTS eval_results (
   agent_run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
   evaluator_name TEXT NOT NULL,
   eval_type TEXT NOT NULL,
-  score REAL NOT NULL,
+  score DOUBLE PRECISION NOT NULL,
   passed INTEGER NOT NULL,
   result_json TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE INDEX IF NOT EXISTS idx_replay_snapshots_run ON replay_snapshots(agent_run_id);
-CREATE INDEX IF NOT EXISTS idx_replay_runs_source ON replay_runs(source_agent_run_id);
-CREATE INDEX IF NOT EXISTS idx_eval_results_run ON eval_results(agent_run_id);
-CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status);
 
 CREATE TABLE IF NOT EXISTS policies (
   id TEXT PRIMARY KEY,
@@ -135,7 +120,7 @@ CREATE TABLE IF NOT EXISTS policies (
   description TEXT,
   policy_yaml TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS policy_violations (
@@ -149,7 +134,7 @@ CREATE TABLE IF NOT EXISTS policy_violations (
   span_id TEXT,
   message TEXT NOT NULL,
   details_json TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS approval_events (
@@ -161,13 +146,16 @@ CREATE TABLE IF NOT EXISTS approval_events (
   status TEXT,
   approved_by TEXT,
   details_json TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_agent_runs_trace_id ON agent_runs(trace_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_user_id ON agent_runs(user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_started_at ON agent_runs(started_at);
+CREATE INDEX IF NOT EXISTS idx_spans_agent_run_id ON spans(agent_run_id);
 CREATE INDEX IF NOT EXISTS idx_policy_violations_run ON policy_violations(agent_run_id);
-CREATE INDEX IF NOT EXISTS idx_policy_violations_severity ON policy_violations(severity);
-CREATE INDEX IF NOT EXISTS idx_approval_events_run ON approval_events(agent_run_id);
 
--- Default local project for development
-INSERT OR IGNORE INTO projects (id, name) VALUES ('proj_local', 'local');
-INSERT OR IGNORE INTO environments (id, project_id, name) VALUES ('env_dev', 'proj_local', 'development');
+INSERT INTO projects (id, name) VALUES ('proj_local', 'local')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO environments (id, project_id, name) VALUES ('env_dev', 'proj_local', 'development')
+ON CONFLICT (id) DO NOTHING;

@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (stub)
+Accepted (Phase 4 scope)
 
 ## Date
 
@@ -10,7 +10,7 @@ Proposed (stub)
 
 ## Owner
 
-<Your Name / Team>
+Agent Flight Recorder contributors
 
 ## Related Decisions
 
@@ -20,48 +20,76 @@ Proposed (stub)
 
 Agent Flight Recorder must support both frictionless local development and production-scale trace ingestion. Traces include high-volume span/event data, relational metadata, and large payloads (prompts, tool I/O, replay snapshots).
 
-From ADR-001, the initial direction is:
-
-- **Local development:** SQLite for fast setup, demos, and zero-infrastructure workflows
-- **Production:** Postgres for relational metadata, ClickHouse for time-series trace analytics, and S3-compatible object storage for large blobs
-
-ADR-001 Section 20.5 considered storing everything in Postgres. That approach is partially accepted for early/simple deployments but rejected as the sole production strategy due to poor fit for high-volume event analytics.
-
 ## Decision
 
-**TBD.** This ADR will formalize:
+### Storage modes
 
-- SQLite schema and migration strategy for local mode
-- Postgres entity model (projects, agents, evals, policies, replay jobs)
-- ClickHouse table design for spans, events, and metrics
-- Object storage layout for prompts, responses, tool payloads, and replay snapshots
-- Retention policies and tiering between hot (ClickHouse) and cold (object storage) data
-- When teams should stay on SQLite vs. upgrade to production storage
+| Mode | Backend | Use case |
+|------|---------|----------|
+| **SQLite** (default) | `AFR_STORAGE_BACKEND=sqlite` | Local dev, demos, CI |
+| **Postgres** | `AFR_STORAGE_BACKEND=postgres` + `AFR_DATABASE_URL` | Production metadata and relational queries |
 
-### Provisional split (from ADR-001)
+Schema files:
 
-| Store | Responsibility |
-|-------|----------------|
-| **SQLite** (local) | All data for single-developer / demo use |
-| **Postgres** (production) | Projects, environments, users, API keys, agents, eval definitions, policy definitions, replay jobs, dataset metadata, access control |
-| **ClickHouse** (production) | Spans, events, model calls, tool calls, token usage, cost/latency/error metrics |
-| **Object storage** (production) | Large prompts, responses, tool payloads, attachments, replay snapshots |
+- `infra/sqlite/schema.sql`
+- `infra/postgres/schema.sql`
+
+The collector uses a unified DB interface (`collector/storage/`) with `?` placeholders converted for Postgres.
+
+### ClickHouse analytics (optional)
+
+High-volume span events are written asynchronously to ClickHouse when `AFR_CLICKHOUSE_URL` is set.
+
+- Schema: `infra/clickhouse/schema.sql`
+- Table: `span_events` (MergeTree, partitioned by month)
+- Writer: `collector/analytics/clickhouse.py` (fire-and-forget on ingest)
+
+### Object storage (optional)
+
+Large span attributes (prompts, responses, tool payloads) exceeding `AFR_BLOB_THRESHOLD_BYTES` (default 4096) are offloaded to S3-compatible storage when `AFR_OBJECT_STORAGE_ENDPOINT` is set.
+
+- References stored in `spans.blob_refs_json`
+- Large replay snapshots use `replay_snapshots.snapshot_blob_key`
+- Implementation: `collector/blob_store.py` (boto3 / MinIO)
+
+### OTLP export
+
+Traces can be forwarded to external OTLP endpoints on ingest:
+
+- `AFR_OTLP_EXPORT_ENDPOINT` — generic collector
+- `LANGFUSE_*` — Langfuse OTLP API
+- `PHOENIX_OTLP_ENDPOINT` — Arize Phoenix
+
+See `examples/exporters/README.md`.
+
+### Production stack
+
+`infra/docker-compose.prod.yml` runs Postgres + ClickHouse + MinIO + collector.
+
+```bash
+make prod-up      # start production compose stack
+make storage-test # verify Postgres ingest + ClickHouse analytics
+```
 
 ## Consequences
 
-**TBD.** Expected topics:
+**Positive**
 
-- Operational complexity of three storage backends in production
-- Migration path from SQLite local exports to production stores
-- Query patterns for trace search vs. analytics aggregation
-- Cost model at millions of spans per day
+- Local SQLite workflow unchanged for Phase 1–3 developers.
+- Production path scales metadata (Postgres) and analytics (ClickHouse) independently.
+- Large payloads do not bloat relational rows.
+- OTLP forwarding integrates with existing observability stacks.
 
-## Exit Criteria (Phase 4)
+**Trade-offs**
 
-From ADR-001 implementation plan:
+- Three optional backends increase operational surface in production.
+- ClickHouse and object storage writes are best-effort async (ingest does not fail if they are down).
+- Full migration tooling from SQLite exports to production stores is deferred.
 
-- System can handle higher-volume trace ingestion
-- Postgres, ClickHouse, and object storage are integrated
-- Teams can run production deployments without SQLite limitations
+## Exit criteria (met)
 
-> See [ADR-001](ADR-001-agent-flight-recorder.md) for the overarching architecture.
+- Postgres backend integrated (`AFR_STORAGE_BACKEND=postgres`)
+- ClickHouse span analytics integrated
+- Object storage blob offload integrated
+- OTLP export to external targets (Langfuse, Phoenix examples)
+- `make storage-test` verifies production storage path

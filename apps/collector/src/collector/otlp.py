@@ -9,6 +9,8 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
 )
 from opentelemetry.proto.common.v1.common_pb2 import AnyValue
 
+from collector.analytics.clickhouse import write_span_events_background
+from collector.blob_store import offload_large_attributes
 from collector.metrics import compute_run_metrics, enrich_span, estimate_cost_usd, span_latency_ms
 from collector.policy import evaluate_policies, load_policies_from_db, persist_policy_results
 from collector.redaction import redact_attributes
@@ -145,9 +147,9 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                 status, started_at, ended_at, metrics_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
-                status = excluded.status,
-                ended_at = excluded.ended_at,
-                metrics_json = excluded.metrics_json
+                status = EXCLUDED.status,
+                ended_at = EXCLUDED.ended_at,
+                metrics_json = EXCLUDED.metrics_json
             """,
             (
                 agent_run["id"],
@@ -168,13 +170,25 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
             if not span_id:
                 continue
             attrs = span.get("attributes") or {}
+            attrs, blob_refs = offload_large_attributes(agent_run["id"], span_id, attrs)
             latency = span_latency_ms(span)
             await db.execute(
                 """
-                INSERT OR REPLACE INTO spans (
+                INSERT INTO spans (
                     id, agent_run_id, span_id, parent_span_id, span_type, name,
-                    status, started_at, ended_at, attributes_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, started_at, ended_at, attributes_json, blob_refs_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    agent_run_id = EXCLUDED.agent_run_id,
+                    span_id = EXCLUDED.span_id,
+                    parent_span_id = EXCLUDED.parent_span_id,
+                    span_type = EXCLUDED.span_type,
+                    name = EXCLUDED.name,
+                    status = EXCLUDED.status,
+                    started_at = EXCLUDED.started_at,
+                    ended_at = EXCLUDED.ended_at,
+                    attributes_json = EXCLUDED.attributes_json,
+                    blob_refs_json = EXCLUDED.blob_refs_json
                 """,
                 (
                     f"span_{span_id}",
@@ -187,6 +201,7 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                     span.get("started_at"),
                     span.get("ended_at"),
                     json.dumps(attrs),
+                    json.dumps(blob_refs) if blob_refs else None,
                 ),
             )
             stored += 1
@@ -205,10 +220,22 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                     cost = estimate_cost_usd(model, input_tokens, output_tokens)
                 await db.execute(
                     """
-                    INSERT OR REPLACE INTO model_calls (
+                    INSERT INTO model_calls (
                         id, agent_run_id, span_id, provider, model,
                         input_tokens, output_tokens, cost_usd, latency_ms, started_at, ended_at, attributes_json
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        agent_run_id = EXCLUDED.agent_run_id,
+                        span_id = EXCLUDED.span_id,
+                        provider = EXCLUDED.provider,
+                        model = EXCLUDED.model,
+                        input_tokens = EXCLUDED.input_tokens,
+                        output_tokens = EXCLUDED.output_tokens,
+                        cost_usd = EXCLUDED.cost_usd,
+                        latency_ms = EXCLUDED.latency_ms,
+                        started_at = EXCLUDED.started_at,
+                        ended_at = EXCLUDED.ended_at,
+                        attributes_json = EXCLUDED.attributes_json
                     """,
                     (
                         f"mc_{span_id}",
@@ -231,10 +258,22 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                 tool_name = attrs.get("tool.name", span.get("name", "tool"))
                 await db.execute(
                     """
-                    INSERT OR REPLACE INTO tool_calls (
+                    INSERT INTO tool_calls (
                         id, agent_run_id, span_id, tool_name, tool_provider, status,
                         risk_level, latency_ms, started_at, ended_at, arguments_json, result_json
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        agent_run_id = EXCLUDED.agent_run_id,
+                        span_id = EXCLUDED.span_id,
+                        tool_name = EXCLUDED.tool_name,
+                        tool_provider = EXCLUDED.tool_provider,
+                        status = EXCLUDED.status,
+                        risk_level = EXCLUDED.risk_level,
+                        latency_ms = EXCLUDED.latency_ms,
+                        started_at = EXCLUDED.started_at,
+                        ended_at = EXCLUDED.ended_at,
+                        arguments_json = EXCLUDED.arguments_json,
+                        result_json = EXCLUDED.result_json
                     """,
                     (
                         f"tc_{span_id}",
@@ -274,6 +313,7 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
             spans=all_spans,
         )
         await persist_policy_results(db, agent_run["id"], violations, approvals, tool_risk)
+        write_span_events_background(agent_run, all_spans)
 
     await db.commit()
     return stored

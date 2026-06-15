@@ -1719,18 +1719,21 @@ Exit criteria (met):
 
 ## Phase 4: Production Storage and Exporters
 
-Build:
+**Status: Complete** (2026-06-16)
 
-* Postgres support.
-* ClickHouse support.
-* Object storage support.
-* OTLP exporter.
-* Sentry/PostHog/Phoenix/Langfuse export examples.
+Built:
 
-Exit criteria:
+* Postgres storage backend (`AFR_STORAGE_BACKEND=postgres`, `infra/postgres/schema.sql`).
+* ClickHouse analytics writer (`span_events` table, async ingest).
+* S3-compatible object storage for large payloads (MinIO in prod compose).
+* OTLP forward exporter (`AFR_OTLP_EXPORT_ENDPOINT`, Langfuse, Phoenix env vars).
+* `infra/docker-compose.prod.yml` production stack.
+* `make prod-up`, `make storage-test`, `GET /v1/storage`.
 
-* System can handle higher-volume trace ingestion.
-* Teams can send traces to existing observability tools.
+Exit criteria (met):
+
+* System can handle higher-volume trace ingestion (ClickHouse + blob offload).
+* Teams can send traces to existing observability tools via OTLP forward.
 
 ---
 

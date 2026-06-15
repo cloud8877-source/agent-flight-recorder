@@ -4,7 +4,6 @@ import json
 import os
 import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
 
 import uvicorn
@@ -13,25 +12,30 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
-from collector.db import get_db, init_db
+from collector.db import get_db, init_db, storage_info
+from collector.paths import repo_root
+from collector.exporters import export_targets, forward_otlp_traces
 from collector.eval import build_regression_test, load_eval_yaml, run_eval
 from collector.models import EvalRunIn, ReplayCreateIn, TraceBatchIn
 from collector.otlp import persist_otlp_spans
 from collector.policy import evaluate_run_policies, load_policies_from_db, seed_default_policies, upsert_policy
 from collector.replay import build_snapshot, create_replay, get_replay, save_snapshot
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-
-
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_db()
     db = await get_db()
     try:
-        await seed_default_policies(db, REPO_ROOT / "examples/policies")
+        await seed_default_policies(db, repo_root() / "examples/policies")
     finally:
         await db.close()
     yield
+    from collector.storage import storage_backend
+
+    if storage_backend() == "postgres":
+        from collector.storage.postgres_backend import close_postgres_pool
+
+        await close_postgres_pool()
 
 
 app = FastAPI(
@@ -50,8 +54,15 @@ app.add_middleware(
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health() -> dict[str, Any]:
+    return {"status": "ok", **storage_info()}
+
+
+@app.get("/v1/storage")
+async def storage_status() -> dict[str, Any]:
+    info = storage_info()
+    info["export_targets"] = export_targets()
+    return info
 
 
 @app.get("/v1/runs")
@@ -344,7 +355,7 @@ async def run_eval_endpoint(body: EvalRunIn) -> dict[str, Any]:
         if body.eval_yaml:
             eval_def = load_eval_yaml(body.eval_yaml)
         else:
-            eval_path = REPO_ROOT / "examples/evals/refund_tool_correctness.yml"
+            eval_path = repo_root() / "examples/evals/refund_tool_correctness.yml"
             eval_def = load_eval_yaml(eval_path.read_text(encoding="utf-8"))
 
         result = run_eval(eval_def, run)
@@ -410,10 +421,13 @@ async def ingest_traces(request: Request) -> Response:
             for span in batch.spans:
                 await db.execute(
                     """
-                    INSERT OR REPLACE INTO spans (
+                    INSERT INTO spans (
                         id, agent_run_id, span_id, parent_span_id, span_type, name,
-                        status, started_at, ended_at, attributes_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        status, started_at, ended_at, attributes_json, blob_refs_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        attributes_json = EXCLUDED.attributes_json,
+                        blob_refs_json = EXCLUDED.blob_refs_json
                     """,
                     (
                         span.id,
@@ -426,6 +440,7 @@ async def ingest_traces(request: Request) -> Response:
                         span.started_at,
                         span.ended_at,
                         json.dumps(span.attributes),
+                        None,
                     ),
                 )
             await db.commit()
@@ -434,13 +449,19 @@ async def ingest_traces(request: Request) -> Response:
             await db.close()
 
     body = await request.body()
+    content_type = request.headers.get("content-type", "application/x-protobuf")
+
     db = await get_db()
     try:
         try:
             count = await persist_otlp_spans(db, body)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"invalid OTLP payload: {exc}") from exc
-        return Response(status_code=200, content=json.dumps({"spans_stored": count}))
+        exports = await forward_otlp_traces(body, content_type)
+        return Response(
+            status_code=200,
+            content=json.dumps({"spans_stored": count, "exports": exports}),
+        )
     finally:
         await db.close()
 
@@ -458,7 +479,8 @@ async def ingest_events(batch: TraceBatchIn) -> dict[str, str]:
 def main() -> None:
     host = os.environ.get("AFR_HOST", "0.0.0.0")
     port = int(os.environ.get("AFR_PORT", "4318"))
-    uvicorn.run("collector.main:app", host=host, port=port, reload=True)
+    reload = os.environ.get("AFR_RELOAD", "").lower() in ("1", "true", "yes")
+    uvicorn.run("collector.main:app", host=host, port=port, reload=reload)
 
 
 if __name__ == "__main__":
