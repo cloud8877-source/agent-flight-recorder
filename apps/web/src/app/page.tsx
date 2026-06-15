@@ -48,6 +48,7 @@ export default async function HomePage({
   return (
     <main>
       <nav className="site-nav">
+        <a href="/dashboard">Dashboard</a>
         <a href="/">Runs</a>
         <a href="/policies">Policies</a>
       </nav>

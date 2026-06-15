@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
+from collector.dashboard import build_dashboard
 from collector.db import get_db, init_db, storage_info
 from collector.paths import repo_root
 from collector.exporters import export_targets, forward_otlp_traces
@@ -56,6 +57,15 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return {"status": "ok", **storage_info()}
+
+
+@app.get("/v1/dashboard")
+async def dashboard(window: int = 200) -> dict[str, Any]:
+    db = await get_db()
+    try:
+        return await build_dashboard(db, window=min(max(window, 1), 1000))
+    finally:
+        await db.close()
 
 
 @app.get("/v1/storage")

@@ -1737,6 +1737,26 @@ Exit criteria (met):
 
 ---
 
+## Phase 5: Framework Integrations and Dashboard
+
+**Status: Complete** (2026-06-16)
+
+Built:
+
+* Reliability dashboard API (`GET /v1/dashboard`) with failure rate, policy violations, cost/latency aggregates.
+* Web dashboard UI (`/dashboard`) with summary cards, expensive agents, failed tools, recent violations.
+* LangGraph integration helpers (`trace_node`, `bind_run`) in Python SDK.
+* OpenAI Agents SDK integration helpers (`trace_tool`, `trace_agent_run`).
+* Example agents: `examples/langgraph-refund-agent/`, `examples/openai-agents-refund-agent/`.
+* `make integration-test` verification script.
+
+Exit criteria (met):
+
+* Developer can trace LangGraph-style node functions and OpenAI Agents-style tools with AFR spans.
+* Dashboard surfaces reliability signals (failures, violations, cost, latency) from stored runs.
+
+---
+
 ## 28. Final Decision Summary
 
 We will build Agent Flight Recorder as an open-source, OpenTelemetry-native reliability platform for AI agents.

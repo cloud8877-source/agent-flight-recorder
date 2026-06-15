@@ -25,4 +25,5 @@ jobs:
       - run: make test
       - run: make e2e
       - run: make policy-test
+      - run: make integration-test
       - run: make storage-test

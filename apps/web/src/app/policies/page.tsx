@@ -46,6 +46,7 @@ export default async function PoliciesPage() {
   return (
     <main>
       <nav className="site-nav">
+        <a href="/dashboard">Dashboard</a>
         <a href="/">Runs</a>
         <a href="/policies">Policies</a>
       </nav>

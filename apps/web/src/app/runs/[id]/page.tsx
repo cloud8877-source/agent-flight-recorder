@@ -35,6 +35,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   return (
     <main>
       <nav className="site-nav">
+        <a href="/dashboard">Dashboard</a>
         <a href="/">Runs</a>
         <a href="/policies">Policies</a>
       </nav>

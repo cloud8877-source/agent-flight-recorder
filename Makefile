@@ -1,4 +1,4 @@
-.PHONY: setup dev collector web demo db-init lint venv test regression policy-test prod-up storage-test
+.PHONY: setup dev collector web demo db-init lint venv test regression policy-test prod-up storage-test integration-test
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -52,3 +52,7 @@ prod-up:
 storage-test: venv
 	chmod +x scripts/storage-e2e.sh
 	./scripts/storage-e2e.sh
+
+integration-test: venv
+	chmod +x scripts/integration-e2e.sh
+	./scripts/integration-e2e.sh

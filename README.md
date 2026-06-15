@@ -74,6 +74,7 @@ Run CI regression tests (Phase 2):
 make test
 make policy-test
 make storage-test   # requires Docker (Postgres + ClickHouse + MinIO)
+make integration-test  # LangGraph + OpenAI Agents example traces
 make prod-up        # production compose stack
 ```
 
@@ -96,6 +97,7 @@ afr policy load examples/policies/require_approval_for_large_refunds.yml
 | [replay.md](docs/replay.md) | Replay modes, snapshots, and CLI usage |
 | [evals.md](docs/evals.md) | Evaluator types, YAML config, and CI regression tests |
 | [policies.md](docs/policies.md) | Policy rules, risk detection, and violation handling |
+| [integrations.md](docs/integrations.md) | LangGraph and OpenAI Agents SDK tracing helpers |
 
 ## Architecture Decisions
 
@@ -131,6 +133,7 @@ ClickHouse/Postgres storage, hosted cloud, team accounts, SSO/RBAC, Slack alerts
 | **2** | Replay & regression ✅ | `afr` CLI; model replay; `afr test` CI gate; GitHub Actions regression workflow |
 | **3** | Policy & risk ✅ | Policy YAML; tool risk + PII detection; violation UI; `make policy-test` |
 | **4** | Production storage & export ✅ | Postgres + ClickHouse + MinIO; OTLP/Langfuse/Phoenix export; `make storage-test` |
+| **5** | Integrations & dashboard ✅ | LangGraph + OpenAI Agents helpers; `/dashboard` UI; `make integration-test` |
 
 ## Key Architectural Bet
 
