@@ -1,8 +1,8 @@
 name: refund_agent_regression
 type: regression
-source_run_id: run_example
-trace_id: trace_example
 pass_threshold: 0.9
+fixture:
+  script: examples/support-refund-agent/main.py
 evaluators:
   - name: refund_tool_correctness
     type: tool_correctness

@@ -48,3 +48,4 @@ class EvalRunIn(BaseModel):
 class ReplayCreateIn(BaseModel):
     source_agent_run_id: str
     mode: str = "exact"
+    model: str | None = None

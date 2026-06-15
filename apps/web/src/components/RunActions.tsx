@@ -7,13 +7,15 @@ export function RunActions({ runId, apiUrl }: { runId: string; apiUrl: string })
   const [evalResult, setEvalResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function startReplay() {
+  async function startReplay(mode: "exact" | "model" = "exact", model?: string) {
     setBusy(true);
     try {
+      const body: Record<string, string> = { source_agent_run_id: runId, mode };
+      if (model) body.model = model;
       const res = await fetch(`${apiUrl}/v1/replays`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source_agent_run_id: runId, mode: "exact" }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       setReplayId(data.id);
@@ -39,8 +41,11 @@ export function RunActions({ runId, apiUrl }: { runId: string; apiUrl: string })
 
   return (
     <div className="actions-row">
-      <button type="button" onClick={startReplay} disabled={busy}>
+      <button type="button" onClick={() => startReplay("exact")} disabled={busy}>
         Replay (exact)
+      </button>
+      <button type="button" onClick={() => startReplay("model", "gpt-4.1-mini")} disabled={busy}>
+        Replay (model)
       </button>
       <button type="button" onClick={runEval} disabled={busy}>
         Run eval

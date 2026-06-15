@@ -79,7 +79,40 @@ def run_eval(eval_def: dict[str, Any], run_detail: dict[str, Any]) -> dict[str, 
     eval_type = eval_def.get("type", "tool_correctness")
     if eval_type == "tool_correctness":
         return run_tool_correctness(eval_def, run_detail)
+    if eval_type == "regression":
+        return run_regression(eval_def, run_detail)
     raise ValueError(f"unsupported eval type: {eval_type}")
+
+
+def run_regression(regression_def: dict[str, Any], run_detail: dict[str, Any]) -> dict[str, Any]:
+    evaluators = regression_def.get("evaluators") or []
+    if not evaluators:
+        raise ValueError("regression suite requires at least one evaluator")
+
+    evaluator_results: list[dict[str, Any]] = []
+    for evaluator in evaluators:
+        evaluator_results.append(run_eval(evaluator, run_detail))
+
+    scores = [float(r["score"]) for r in evaluator_results]
+    score = round(sum(scores) / len(scores), 4)
+    threshold = float(regression_def.get("pass_threshold", 0.9))
+    passed = score >= threshold and all(r["passed"] for r in evaluator_results)
+
+    failures: list[str] = []
+    for result in evaluator_results:
+        if not result.get("passed"):
+            failures.extend(result.get("failures") or [f"{result['evaluator_name']} failed"])
+
+    return {
+        "evaluator_name": regression_def.get("name", "regression"),
+        "eval_type": "regression",
+        "score": score,
+        "passed": passed,
+        "pass_threshold": threshold,
+        "failures": failures,
+        "evaluator_results": evaluator_results,
+        "checks": sum(int(r.get("checks") or 0) for r in evaluator_results),
+    }
 
 
 def _agent_slug(agent_name: str) -> str:

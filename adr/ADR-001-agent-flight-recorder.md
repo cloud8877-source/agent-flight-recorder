@@ -1668,13 +1668,16 @@ Exit criteria (met):
 
 ## Phase 2: Replay and Regression Tests
 
-Build:
+**Status: Complete** (2026-06-16)
 
-* Replay snapshot format.
-* Replay runner.
-* Trace-to-test conversion.
-* Basic eval runner.
-* CLI command for CI.
+Built:
+
+* Replay snapshot format (v1 JSON schema).
+* Replay runner with `exact` and `model` modes.
+* Trace-to-regression-test export (`GET /v1/runs/{id}/regression-test`, `afr export regression`).
+* Regression eval runner (`tool_correctness` suites with `pass_threshold`).
+* `afr` CLI (`packages/cli`): `replay`, `eval run`, `test`, `export regression`.
+* `make test` + `.github/workflows/regression.yml` CI gate.
 
 Example CLI:
 
@@ -1684,10 +1687,10 @@ afr eval run regression_refund_agent.yml
 afr test ./afr-tests/
 ```
 
-Exit criteria:
+Exit criteria (met):
 
 * Developer can turn a production-like trace into a regression test.
-* CI can fail when an eval score drops below threshold.
+* CI fails when an eval score drops below threshold (`afr test`, exit code 1).
 
 ---
 

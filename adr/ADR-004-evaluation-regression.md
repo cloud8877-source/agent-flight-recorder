@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (Phase 1 scope)
+Accepted
 
 ## Date
 
@@ -59,7 +59,11 @@ Exported YAML includes `name`, `type: regression`, `source_run_id`, `trace_id`, 
 
 ### CI integration
 
-`make e2e` (`scripts/e2e.sh`) exercises the full Phase 1 loop: demo agent → ingest → search → replay → eval → regression export.
+- `make e2e` — full stack smoke test including CLI replay/eval
+- `make test` — regression gate via `afr test examples/afr-tests/`
+- `.github/workflows/regression.yml` — fails PRs when eval score drops below `pass_threshold`
+
+Regression YAML supports `fixture.script` to record a fresh trace in CI without hardcoded run IDs.
 
 ### Scoring
 
@@ -75,8 +79,8 @@ Exported YAML includes `name`, `type: regression`, `source_run_id`, `trace_id`, 
 
 **Deferred**
 
-- `afr` CLI and GitHub Actions gate (Phase 2).
-- Live replay comparison against original trace (Phase 2).
+- Prompt/tool/retrieval replay modes with live agent execution.
 - Dataset management and eval suites spanning multiple runs.
+- LLM-as-judge evaluators.
 
 > See [docs/evals.md](../docs/evals.md) for usage examples.

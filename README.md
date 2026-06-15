@@ -68,6 +68,20 @@ Verify the full Phase 1 loop:
 make e2e
 ```
 
+Run CI regression tests (Phase 2):
+
+```bash
+make test
+```
+
+CLI examples:
+
+```bash
+afr replay run_abc123 --model gpt-4.1-mini
+afr eval run examples/evals/refund_tool_correctness.yml --run-id run_abc123
+afr test ./examples/afr-tests/
+```
+
 ## Documentation
 
 | Doc | Description |
@@ -109,7 +123,7 @@ ClickHouse/Postgres storage, hosted cloud, team accounts, SSO/RBAC, Slack alerts
 | Phase | Focus | Exit Criteria |
 |-------|-------|---------------|
 | **1** | Local trace capture ✅ | Capture agent run locally; inspect model/tool calls; cost/latency/redaction/search/replay/eval; `make e2e` passes |
-| **2** | Replay & regression | Trace → regression test; CI fails on eval score below threshold |
+| **2** | Replay & regression ✅ | `afr` CLI; model replay; `afr test` CI gate; GitHub Actions regression workflow |
 | **3** | Policy & risk | Define policies; detect risky/forbidden tool calls; violation UI |
 | **4** | Production storage & export | Postgres + ClickHouse + object storage; OTLP and third-party exporters |
 
@@ -124,6 +138,7 @@ apps/collector      FastAPI ingestion API
 apps/web            Next.js trace viewer
 packages/sdk-js     TypeScript SDK
 packages/sdk-python Python SDK
+packages/cli          afr CLI (replay, eval, test)
 packages/shared-schema  Span types and JSON schemas
 examples/           Demo agents
 infra/              Docker Compose and SQLite schema

@@ -1,4 +1,4 @@
-.PHONY: setup dev collector web demo db-init lint venv
+.PHONY: setup dev collector web demo db-init lint venv test regression
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -10,7 +10,7 @@ venv:
 setup: venv
 	corepack enable
 	pnpm install
-	$(PIP) install -e apps/collector -e packages/sdk-python
+	$(PIP) install -e apps/collector -e packages/sdk-python -e packages/cli
 
 db-init: venv
 	mkdir -p data
@@ -35,3 +35,9 @@ lint:
 e2e: venv
 	chmod +x scripts/e2e.sh
 	./scripts/e2e.sh
+
+test: venv
+	chmod +x scripts/regression.sh
+	./scripts/regression.sh
+
+regression: test

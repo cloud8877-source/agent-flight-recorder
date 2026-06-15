@@ -81,5 +81,5 @@ jobs:
           corepack enable
           pnpm install
           python -m venv .venv
-          .venv/bin/pip install -e apps/collector -e packages/sdk-python
+          .venv/bin/pip install -e apps/collector -e packages/sdk-python -e packages/cli
       - run: make e2e

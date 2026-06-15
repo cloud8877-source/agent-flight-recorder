@@ -17,7 +17,7 @@ ADRs move through these states:
 | [ADR-001](ADR-001-agent-flight-recorder.md) | Build an OpenTelemetry-Native Agent Flight Recorder | Accepted |
 | [ADR-002](ADR-002-storage-strategy.md) | Storage Strategy for Agent Traces and Replay Data | Proposed (stub) |
 | [ADR-003](ADR-003-redaction-privacy.md) | Redaction and Privacy Model for Prompt/Response Logging | Accepted |
-| [ADR-004](ADR-004-evaluation-regression.md) | Evaluation and Regression Testing Strategy | Accepted (Phase 1 scope) |
+| [ADR-004](ADR-004-evaluation-regression.md) | Evaluation and Regression Testing Strategy | Accepted |
 | [ADR-005](ADR-005-open-source-boundary.md) | Open Source Core vs. Commercial Cloud Boundary | Accepted |
 
 [ADR-001](ADR-001-agent-flight-recorder.md) is the parent decision. ADRs 002–005 expand on specific areas deferred from that document.

@@ -115,16 +115,36 @@ Open the local UI (default `http://localhost:3000`) and:
 2. Open the trace timeline
 3. Inspect model calls, tool calls, cost, and latency breakdown
 
-## Phase 1 Exit Criteria
+## 6. Replay, Eval, and CI (Phase 2)
 
-From [ADR-001](../adr/ADR-001-agent-flight-recorder.md):
+After `make setup`, the `afr` CLI is available in `.venv/bin/afr`:
 
-- [ ] Developer can capture an agent run locally
-- [ ] Developer can inspect model calls and tool calls in the UI
-- [ ] Setup works through Docker Compose
+```bash
+# Model replay against a stored run
+afr replay <run_id> --model gpt-4.1-mini
+
+# Run a single eval YAML
+afr eval run examples/evals/refund_tool_correctness.yml --run-id <run_id>
+
+# Run regression suite (CI gate — exits 1 on failure)
+afr test examples/afr-tests/
+```
+
+Or use Makefile shortcuts:
+
+```bash
+make e2e          # full Phase 1 + CLI smoke test
+make test         # regression CI gate only
+```
+
+Export a regression test from any run:
+
+```bash
+afr export regression <run_id> -o my_regression.yml
+```
 
 ## Next Steps
 
-- [replay.md](replay.md) — replay a captured run with different prompt/model/tool config
-- [evals.md](evals.md) — define evaluators and convert a failure into a regression test
+- [replay.md](replay.md) — replay modes (exact, model) and snapshot format
+- [evals.md](evals.md) — evaluators, regression YAML, and GitHub Actions gate
 - [architecture.md](architecture.md) — full system design

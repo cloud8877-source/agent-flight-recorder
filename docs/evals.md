@@ -4,7 +4,7 @@ Structured assessments of agent outputs and traces — used for debugging, regre
 
 > Parent decision: [ADR-001](../adr/ADR-001-agent-flight-recorder.md)
 
-Full strategy: [ADR-004](../adr/ADR-004-evaluation-regression.md) (stub).
+Full strategy: [ADR-004](../adr/ADR-004-evaluation-regression.md).
 
 ## Eval Types
 
@@ -49,12 +49,16 @@ rules:
 ```yaml
 name: refund_agent_regression
 type: regression
-dataset: production_refund_failures
 pass_threshold: 0.9
+fixture:
+  script: examples/support-refund-agent/main.py
 evaluators:
-  - refund_tool_correctness
-  - no_private_notes_leak
-  - final_answer_helpfulness
+  - name: refund_tool_correctness
+    type: tool_correctness
+    rules:
+      - tool_name: refund_payment
+        must_only_be_called_when:
+          - tool.arguments.amount_usd == 49.99
 ```
 
 ## Trace → Regression Test
@@ -78,7 +82,9 @@ afr eval run regression_refund_agent.yml
 afr test ./afr-tests/
 ```
 
-CI should fail when an eval score drops below the configured `pass_threshold`.
+CI should fail when an eval score drops below the configured `pass_threshold`. Use `make test` locally or the GitHub Actions `regression.yml` workflow.
+
+Regression YAML files may include a `fixture.script` that records a fresh trace before evaluators run — this keeps CI independent of hardcoded `source_run_id` values.
 
 ## Eval on Production vs. Replay
 

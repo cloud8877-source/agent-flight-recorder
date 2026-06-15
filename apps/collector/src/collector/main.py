@@ -17,7 +17,7 @@ from collector.db import get_db, init_db
 from collector.eval import build_regression_test, load_eval_yaml, run_eval
 from collector.models import EvalRunIn, ReplayCreateIn, TraceBatchIn
 from collector.otlp import persist_otlp_spans
-from collector.replay import build_snapshot, create_exact_replay, get_replay, save_snapshot
+from collector.replay import build_snapshot, create_replay, get_replay, save_snapshot
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -177,16 +177,27 @@ async def regression_test(run_id: str) -> PlainTextResponse:
 
 
 @app.post("/v1/replays")
-async def create_replay(body: ReplayCreateIn) -> dict[str, Any]:
-    if body.mode != "exact":
-        raise HTTPException(status_code=400, detail="only exact replay supported in Phase 1")
+async def create_replay_endpoint(body: ReplayCreateIn) -> dict[str, Any]:
+    if body.mode not in {"exact", "model"}:
+        raise HTTPException(status_code=400, detail="supported replay modes: exact, model")
+    if body.mode == "model" and not body.model:
+        raise HTTPException(status_code=400, detail="model replay requires model")
 
     db = await get_db()
     try:
         run = await _fetch_run_detail(db, body.source_agent_run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="source run not found")
-        return await create_exact_replay(db, body.source_agent_run_id, run)
+        try:
+            return await create_replay(
+                db,
+                body.source_agent_run_id,
+                run,
+                mode=body.mode,
+                model=body.model,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         await db.close()
 

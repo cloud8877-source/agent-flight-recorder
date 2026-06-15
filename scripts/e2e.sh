@@ -42,4 +42,8 @@ echo "$EVAL" | "$PYTHON" -c "import sys,json; d=json.load(sys.stdin); assert d['
 
 curl -sf "$API/v1/runs/$RUN_ID/regression-test" | grep -q "refund_agent_regression"
 
+AFR="${VENV}/bin/afr"
+AFR_ENDPOINT="$API" "$AFR" replay "$RUN_ID" --model gpt-4.1-mini | grep -q "replay_"
+AFR_ENDPOINT="$API" "$AFR" eval run examples/evals/refund_tool_correctness.yml --run-id "$RUN_ID" | grep -q "passed=True"
+
 echo "e2e passed"
