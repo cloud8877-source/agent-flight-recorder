@@ -100,12 +100,12 @@ await recorder.agentRun(
 
 ### What Gets Captured
 
-Each `agent_run` produces spans for:
+Each `agent_run` exports **OpenTelemetry spans** via OTLP HTTP to `POST /v1/traces`, with agent semantics in `afr.*` attributes:
 
-- Model calls (provider, model, tokens, cost, latency)
-- Tool calls (name, arguments, results, risk level)
-- Retrieval queries, memory reads/writes
-- Errors, policy checks, human approvals
+- `afr.span_type`: `agent.run`, `llm.call`, `tool.call`, etc.
+- Model calls (`llm.*` attributes)
+- Tool calls (`tool.*` attributes)
+- Parent/child span hierarchy for the trace timeline
 
 ## 5. View Traces
 

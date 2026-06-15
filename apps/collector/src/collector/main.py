@@ -6,11 +6,12 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from collector.db import get_db, init_db
 from collector.models import AgentRunIn, SpanIn, TraceBatchIn
+from collector.otlp import persist_otlp_spans
 
 
 @asynccontextmanager
@@ -59,37 +60,68 @@ async def list_runs(limit: int = 50) -> list[dict[str, Any]]:
         await db.close()
 
 
+async def _fetch_run_detail(db: Any, run_id: str) -> dict[str, Any] | None:
+    cursor = await db.execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,))
+    run = await cursor.fetchone()
+    if run is None:
+        return None
+
+    cursor = await db.execute(
+        """
+        SELECT id, span_id, parent_span_id, span_type, name, status,
+               started_at, ended_at, attributes_json
+        FROM spans
+        WHERE agent_run_id = ?
+        ORDER BY started_at ASC
+        """,
+        (run_id,),
+    )
+    spans = await cursor.fetchall()
+
+    cursor = await db.execute(
+        """
+        SELECT id, provider, model, input_tokens, output_tokens, cost_usd,
+               latency_ms, started_at, ended_at
+        FROM model_calls
+        WHERE agent_run_id = ?
+        ORDER BY started_at ASC
+        """,
+        (run_id,),
+    )
+    model_calls = await cursor.fetchall()
+
+    cursor = await db.execute(
+        """
+        SELECT id, tool_name, tool_provider, status, risk_level, latency_ms,
+               started_at, ended_at
+        FROM tool_calls
+        WHERE agent_run_id = ?
+        ORDER BY started_at ASC
+        """,
+        (run_id,),
+    )
+    tool_calls = await cursor.fetchall()
+
+    result = dict(run)
+    result["spans"] = [
+        {
+            **dict(span),
+            "attributes": json.loads(span["attributes_json"] or "{}"),
+        }
+        for span in spans
+    ]
+    result["model_calls"] = [dict(row) for row in model_calls]
+    result["tool_calls"] = [dict(row) for row in tool_calls]
+    return result
+
+
 @app.get("/v1/runs/{run_id}")
 async def get_run(run_id: str) -> dict[str, Any]:
     db = await get_db()
     try:
-        cursor = await db.execute(
-            "SELECT * FROM agent_runs WHERE id = ?",
-            (run_id,),
-        )
-        run = await cursor.fetchone()
-        if run is None:
+        result = await _fetch_run_detail(db, run_id)
+        if result is None:
             raise HTTPException(status_code=404, detail="run not found")
-
-        cursor = await db.execute(
-            """
-            SELECT id, span_id, parent_span_id, span_type, name, status,
-                   started_at, ended_at, attributes_json
-            FROM spans
-            WHERE agent_run_id = ?
-            ORDER BY started_at ASC
-            """,
-            (run_id,),
-        )
-        spans = await cursor.fetchall()
-        result = dict(run)
-        result["spans"] = [
-            {
-                **dict(span),
-                "attributes": json.loads(span["attributes_json"] or "{}"),
-            }
-            for span in spans
-        ]
         return result
     finally:
         await db.close()
@@ -149,8 +181,7 @@ async def _insert_span(db: Any, span: SpanIn) -> None:
     )
 
 
-@app.post("/v1/traces")
-async def ingest_traces(batch: TraceBatchIn) -> dict[str, str]:
+async def _ingest_native_batch(batch: TraceBatchIn) -> dict[str, str]:
     db = await get_db()
     try:
         if batch.agent_run is not None:
@@ -163,9 +194,36 @@ async def ingest_traces(batch: TraceBatchIn) -> dict[str, str]:
         await db.close()
 
 
+@app.post("/v1/traces")
+async def ingest_traces(request: Request) -> Response:
+    content_type = request.headers.get("content-type", "")
+
+    if "application/json" in content_type:
+        batch = TraceBatchIn.model_validate(await request.json())
+        result = await _ingest_native_batch(batch)
+        return Response(content=json.dumps(result), media_type="application/json")
+
+    body = await request.body()
+    db = await get_db()
+    try:
+        try:
+            count = await persist_otlp_spans(db, body)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"invalid OTLP payload: {exc}") from exc
+        return Response(status_code=200, content=json.dumps({"spans_stored": count}))
+    finally:
+        await db.close()
+
+
+@app.post("/v1/afr/traces")
+async def ingest_native_traces(batch: TraceBatchIn) -> dict[str, str]:
+    """Legacy native JSON batch format (pre-OTel SDK clients)."""
+    return await _ingest_native_batch(batch)
+
+
 @app.post("/v1/events")
 async def ingest_events(batch: TraceBatchIn) -> dict[str, str]:
-    return await ingest_traces(batch)
+    return await _ingest_native_batch(batch)
 
 
 def main() -> None:

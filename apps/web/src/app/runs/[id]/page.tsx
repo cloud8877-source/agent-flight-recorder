@@ -1,21 +1,6 @@
-type Span = {
-  id: string;
-  span_type: string;
-  name: string;
-  status: string;
-  started_at: string;
-  attributes: Record<string, unknown>;
-};
-
-type RunDetail = {
-  id: string;
-  trace_id: string;
-  agent_name: string;
-  status: string;
-  started_at: string;
-  ended_at: string | null;
-  spans: Span[];
-};
+import { RunSummary } from "@/components/RunSummary";
+import { Timeline } from "@/components/Timeline";
+import type { RunDetail } from "@/lib/trace";
 
 async function fetchRun(id: string): Promise<RunDetail | null> {
   const apiUrl = process.env.NEXT_PUBLIC_AFR_API_URL ?? "http://localhost:4318";
@@ -50,35 +35,42 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
       </p>
       <h1>{run.agent_name}</h1>
       <p className="muted">
-        {run.id} · {run.status} · trace {run.trace_id}
+        {run.id} · user {run.user_id ?? "—"} · trace {run.trace_id}
       </p>
+
+      <RunSummary run={run} />
+
+      {(run.model_calls.length > 0 || run.tool_calls.length > 0) && (
+        <div className="card">
+          <h2>Calls</h2>
+          <div className="calls-grid">
+            {run.model_calls.map((call) => (
+              <div key={call.id} className="call-chip type-llm-call">
+                <span className="call-type">llm</span>
+                <span>
+                  {call.provider}/{call.model}
+                </span>
+                <span className="muted">
+                  {call.input_tokens ?? 0}→{call.output_tokens ?? 0} tok
+                </span>
+              </div>
+            ))}
+            {run.tool_calls.map((call) => (
+              <div key={call.id} className="call-chip type-tool-call">
+                <span className="call-type">tool</span>
+                <span>{call.tool_name}</span>
+                <span className={`status-pill ${call.status === "success" ? "status-ok" : "status-error"}`}>
+                  {call.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h2>Timeline</h2>
-        {run.spans.length === 0 ? (
-          <p className="muted">No spans recorded.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Started</th>
-              </tr>
-            </thead>
-            <tbody>
-              {run.spans.map((span) => (
-                <tr key={span.id}>
-                  <td>{span.span_type}</td>
-                  <td>{span.name}</td>
-                  <td>{span.status}</td>
-                  <td>{span.started_at}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <Timeline spans={run.spans} />
       </div>
     </main>
   );
