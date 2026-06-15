@@ -37,3 +37,14 @@ class SpanIn(BaseModel):
 class TraceBatchIn(BaseModel):
     agent_run: AgentRunIn | None = None
     spans: list[SpanIn] = Field(default_factory=list)
+
+
+class EvalRunIn(BaseModel):
+    agent_run_id: str
+    eval_yaml: str | None = None
+    eval_name: str | None = None
+
+
+class ReplayCreateIn(BaseModel):
+    source_agent_run_id: str
+    mode: str = "exact"

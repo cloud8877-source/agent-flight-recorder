@@ -62,6 +62,12 @@ make dev
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for native (non-Docker) development.
 
+Verify the full Phase 1 loop:
+
+```bash
+make e2e
+```
+
 ## Documentation
 
 | Doc | Description |
@@ -102,7 +108,7 @@ ClickHouse/Postgres storage, hosted cloud, team accounts, SSO/RBAC, Slack alerts
 
 | Phase | Focus | Exit Criteria |
 |-------|-------|---------------|
-| **1** | Local trace capture | Capture agent run locally; inspect model/tool calls; Docker Compose works |
+| **1** | Local trace capture ✅ | Capture agent run locally; inspect model/tool calls; cost/latency/redaction/search/replay/eval; `make e2e` passes |
 | **2** | Replay & regression | Trace → regression test; CI fails on eval score below threshold |
 | **3** | Policy & risk | Define policies; detect risky/forbidden tool calls; violation UI |
 | **4** | Production storage & export | Postgres + ClickHouse + object storage; OTLP and third-party exporters |

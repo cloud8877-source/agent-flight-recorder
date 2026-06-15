@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-flight-recorder.dev/schemas/replay-snapshot.json",
+  "title": "ReplaySnapshot",
+  "type": "object",
+  "required": ["version", "source_run_id", "trace_id", "agent_name", "spans"],
+  "properties": {
+    "version": { "type": "string" },
+    "source_run_id": { "type": "string" },
+    "trace_id": { "type": "string" },
+    "agent_name": { "type": "string" },
+    "environment": { "type": "string" },
+    "spans": { "type": "array" },
+    "model_calls": { "type": "array" },
+    "tool_calls": { "type": "array" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

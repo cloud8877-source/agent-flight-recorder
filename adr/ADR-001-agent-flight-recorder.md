@@ -1641,20 +1641,28 @@ Potential paid features:
 
 ## Phase 1: Local Trace Capture
 
-Build:
+**Status: Complete** (2026-06-16)
 
-* Python SDK.
-* TypeScript SDK.
-* Local collector.
-* SQLite schema.
-* Basic trace viewer.
-* Demo agent.
+Built:
 
-Exit criteria:
+* Python SDK with OTLP export, cost/latency metrics, and redaction.
+* TypeScript SDK with OTLP export.
+* Local collector (FastAPI) with OTLP ingest, search, replay stub, and eval runner.
+* SQLite schema including `replay_snapshots`, `replay_runs`, and `eval_results`.
+* Trace timeline UI with cost, latency, search, errors, replay, and eval actions.
+* Demo support-refund agent.
+* `make e2e` end-to-end verification script.
+
+Exit criteria (met):
 
 * Developer can capture an agent run locally.
-* Developer can inspect model calls and tool calls.
-* Setup works through Docker Compose.
+* Developer can inspect model calls and tool calls with cost and latency.
+* Search by `user_id` and `trace_id`.
+* Basic redaction masks emails and removes API keys.
+* Exact replay creates a `replay_run` from a stored trace.
+* `tool_correctness` eval passes on the demo trace.
+* Regression test YAML exports from a run.
+* Setup works through Docker Compose and `make setup`.
 
 ---
 

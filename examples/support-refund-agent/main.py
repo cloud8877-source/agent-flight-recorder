@@ -19,6 +19,7 @@ def fake_refund_agent(user_message: str) -> str:
             span.set_attribute("tool.arguments.amount_usd", 49.99)
 
         with run.span("compose_reply", "llm.call", attributes={"llm.model": "gpt-4.1-mini"}) as span:
+            span.set_attribute("llm.input_tokens", 80)
             span.set_attribute("llm.output_tokens", 120)
 
         return f"Refunded order for: {user_message}"

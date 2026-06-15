@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (stub)
+Accepted (Phase 1 scope)
 
 ## Date
 
@@ -10,7 +10,7 @@ Proposed (stub)
 
 ## Owner
 
-<Your Name / Team>
+Agent Flight Recorder contributors
 
 ## Related Decisions
 
@@ -24,51 +24,59 @@ ADR-001 defines replay as a first-class capability with five modes (exact, promp
 
 ## Decision
 
-**TBD.** This ADR will formalize:
+Phase 1 delivers a **minimal eval runner** and **trace-to-regression-test export** suitable for local development and scripted CI.
 
-- Evaluator types and execution model
-- Trace-to-regression-test conversion format
-- Scoring, pass thresholds, and CI integration
-- Relationship between replay results and eval results
-- Dataset management for regression suites
+### Evaluator types (Phase 1)
 
-### Provisional eval types (from ADR-001)
+| Type | Status | Description |
+|------|--------|-------------|
+| `tool_correctness` | Implemented | Rule-based checks on tool call names and span attributes |
+| Rule-based (general) | Partial | Condition syntax `field == value` on tool span attributes |
+| LLM-as-judge | Deferred | Phase 2+ |
+| Policy compliance | Deferred | Phase 3 |
 
-1. Rule-based evals
-2. LLM-as-judge evals
-3. Tool correctness evals
-4. Policy compliance evals
-5. Regression evals
-6. Human review evals
+### APIs
 
-### Example CLI (Phase 2)
+- `POST /v1/evals/run` — run eval against a stored `agent_run_id`; persists result to `eval_results`.
+- `GET /v1/runs/{id}/regression-test` — export YAML regression suite derived from a trace.
 
-```bash
-afr replay run_123 --model gpt-4.1-mini
-afr eval run regression_refund_agent.yml
-afr test ./afr-tests/
+Default eval fixture: `examples/evals/refund_tool_correctness.yml`. Example regression export: `examples/afr-tests/refund_agent_regression.yml`.
+
+### Tool correctness rules
+
+```yaml
+rules:
+  - tool_name: refund_payment
+    must_only_be_called_when:
+      - tool.arguments.amount_usd == 49.99
 ```
 
-### MVP scope
+Conditions match against span attributes (`tool.arguments.*`, `tool.result.*`) and `tool_calls` table entries.
 
-**Must have:** manual eval definition, convert trace into regression test
+### Regression test format
 
-**Should have:** JSON/YAML eval configuration, GitHub Actions example for regression tests
+Exported YAML includes `name`, `type: regression`, `source_run_id`, `trace_id`, `pass_threshold`, and nested `evaluators` with tool rules scaffolded from observed tool calls.
 
-**Could have:** LLM-as-judge evals, managed eval workers (commercial)
+### CI integration
+
+`make e2e` (`scripts/e2e.sh`) exercises the full Phase 1 loop: demo agent → ingest → search → replay → eval → regression export.
+
+### Scoring
+
+- `tool_correctness`: score `1.0` if all rules pass, else `0.0`.
+- `passed`: boolean; eval fails if any rule condition is unmet.
 
 ## Consequences
 
-**TBD.** Expected topics:
+**Positive**
 
-- Non-determinism in LLM-as-judge evals and how to make CI reliable
-- Versioning of eval definitions alongside agent/prompt changes
-- Storage of eval results and linkage to source agent runs
-- False positive/negative rates and developer trust in CI gates
+- Developers can turn a captured trace into a regression artifact without manual YAML authoring.
+- Eval results are stored alongside runs for audit.
 
-## Exit Criteria (Phase 2)
+**Deferred**
 
-- Developer can turn a production-like trace into a regression test
-- CI can fail when an eval score drops below threshold
+- `afr` CLI and GitHub Actions gate (Phase 2).
+- Live replay comparison against original trace (Phase 2).
+- Dataset management and eval suites spanning multiple runs.
 
-> See [ADR-001](ADR-001-agent-flight-recorder.md) for the overarching architecture. See also [docs/evals.md](../docs/evals.md) and [docs/replay.md](../docs/replay.md).
+> See [docs/evals.md](../docs/evals.md) for usage examples.

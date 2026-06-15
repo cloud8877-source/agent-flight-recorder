@@ -9,6 +9,9 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
 )
 from opentelemetry.proto.common.v1.common_pb2 import AnyValue
 
+from collector.metrics import compute_run_metrics, enrich_span, estimate_cost_usd, span_latency_ms
+from collector.redaction import redact_attributes
+
 AFR_SPAN_TYPE = "afr.span_type"
 AFR_RUN_ID = "afr.run_id"
 AFR_AGENT_NAME = "afr.agent_name"
@@ -49,7 +52,6 @@ def _attrs(values: Any) -> dict[str, Any]:
 
 
 def _span_status(code: int) -> str:
-    # STATUS_CODE_ERROR = 2
     if code == 2:
         return "error"
     return "ok"
@@ -65,7 +67,7 @@ def _parse_export_request(body: bytes) -> list[dict[str, Any]]:
         for scope_spans in resource_spans.scope_spans:
             for span in scope_spans.spans:
                 attrs = _attrs(span.attributes)
-                merged_attrs = {**resource_attrs, **attrs}
+                merged_attrs = redact_attributes({**resource_attrs, **attrs})
                 spans.append(
                     {
                         "trace_id": _hex_id(span.trace_id),
@@ -105,7 +107,7 @@ def _derive_agent_run(trace_id: str, spans: list[dict[str, Any]]) -> dict[str, A
     has_error = any(s.get("status") == "error" for s in spans)
     status = "failed" if has_error else "success"
 
-    return {
+    agent_run = {
         "id": run_id,
         "trace_id": trace_id,
         "agent_name": agent_name,
@@ -116,10 +118,12 @@ def _derive_agent_run(trace_id: str, spans: list[dict[str, Any]]) -> dict[str, A
         "started_at": started_at,
         "ended_at": ended_at,
     }
+    agent_run["metrics"] = compute_run_metrics(agent_run, spans)
+    return agent_run
 
 
 async def persist_otlp_spans(db: Any, body: bytes) -> int:
-    spans = _parse_export_request(body)
+    spans = [enrich_span(s) for s in _parse_export_request(body)]
     if not spans:
         return 0
 
@@ -137,11 +141,12 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
             """
             INSERT INTO agent_runs (
                 id, trace_id, agent_name, user_id, session_id, environment,
-                status, started_at, ended_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status, started_at, ended_at, metrics_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
-                ended_at = excluded.ended_at
+                ended_at = excluded.ended_at,
+                metrics_json = excluded.metrics_json
             """,
             (
                 agent_run["id"],
@@ -153,6 +158,7 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                 agent_run["status"],
                 agent_run["started_at"],
                 agent_run["ended_at"],
+                json.dumps(agent_run.get("metrics")),
             ),
         )
 
@@ -160,7 +166,8 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
             span_id = span.get("span_id")
             if not span_id:
                 continue
-            span_uuid = f"span_{span_id}"
+            attrs = span.get("attributes") or {}
+            latency = span_latency_ms(span)
             await db.execute(
                 """
                 INSERT OR REPLACE INTO spans (
@@ -169,7 +176,7 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    span_uuid,
+                    f"span_{span_id}",
                     agent_run["id"],
                     span_id,
                     span.get("parent_span_id"),
@@ -178,30 +185,40 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                     span.get("status", "ok"),
                     span.get("started_at"),
                     span.get("ended_at"),
-                    json.dumps(span.get("attributes") or {}),
+                    json.dumps(attrs),
                 ),
             )
             stored += 1
 
             span_type = span.get("span_type")
-            attrs = span.get("attributes") or {}
             if span_type == "llm.call":
+                model = str(attrs.get("llm.model", "unknown"))
+                input_tokens = attrs.get("llm.input_tokens")
+                output_tokens = attrs.get("llm.output_tokens")
+                if input_tokens is not None:
+                    input_tokens = int(input_tokens)
+                if output_tokens is not None:
+                    output_tokens = int(output_tokens)
+                cost = attrs.get("llm.cost_usd")
+                if cost is None:
+                    cost = estimate_cost_usd(model, input_tokens, output_tokens)
                 await db.execute(
                     """
                     INSERT OR REPLACE INTO model_calls (
                         id, agent_run_id, span_id, provider, model,
-                        input_tokens, output_tokens, latency_ms, started_at, ended_at, attributes_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        input_tokens, output_tokens, cost_usd, latency_ms, started_at, ended_at, attributes_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         f"mc_{span_id}",
                         agent_run["id"],
                         span_id,
                         attrs.get("llm.provider", "unknown"),
-                        attrs.get("llm.model", "unknown"),
-                        attrs.get("llm.input_tokens"),
-                        attrs.get("llm.output_tokens"),
-                        attrs.get("llm.latency_ms"),
+                        model,
+                        input_tokens,
+                        output_tokens,
+                        cost,
+                        latency,
                         span.get("started_at"),
                         span.get("ended_at"),
                         json.dumps(attrs),
@@ -222,7 +239,7 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                         attrs.get("tool.name", span.get("name", "tool")),
                         attrs.get("tool.provider"),
                         "error" if span.get("status") == "error" else "success",
-                        attrs.get("tool.latency_ms"),
+                        latency,
                         span.get("started_at"),
                         span.get("ended_at"),
                         json.dumps({k: v for k, v in attrs.items() if k.startswith("tool.arguments.")}),

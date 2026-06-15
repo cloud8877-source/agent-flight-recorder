@@ -1,3 +1,5 @@
+import { ErrorBanner } from "@/components/ErrorBanner";
+import { RunActions } from "@/components/RunActions";
 import { RunSummary } from "@/components/RunSummary";
 import { Timeline } from "@/components/Timeline";
 import type { RunDetail } from "@/lib/trace";
@@ -16,6 +18,7 @@ async function fetchRun(id: string): Promise<RunDetail | null> {
 export default async function RunDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const run = await fetchRun(id);
+  const apiUrl = process.env.NEXT_PUBLIC_AFR_API_URL ?? "http://localhost:4318";
 
   if (!run) {
     return (
@@ -38,7 +41,9 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
         {run.id} · user {run.user_id ?? "—"} · trace {run.trace_id}
       </p>
 
+      <ErrorBanner run={run} />
       <RunSummary run={run} />
+      <RunActions runId={run.id} apiUrl={apiUrl} />
 
       {(run.model_calls.length > 0 || run.tool_calls.length > 0) && (
         <div className="card">
@@ -51,7 +56,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
                   {call.provider}/{call.model}
                 </span>
                 <span className="muted">
-                  {call.input_tokens ?? 0}→{call.output_tokens ?? 0} tok
+                  {call.latency_ms ?? "—"}ms · {call.input_tokens ?? 0}→{call.output_tokens ?? 0} tok
                 </span>
               </div>
             ))}
@@ -59,6 +64,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
               <div key={call.id} className="call-chip type-tool-call">
                 <span className="call-type">tool</span>
                 <span>{call.tool_name}</span>
+                <span className="muted">{call.latency_ms ?? "—"}ms</span>
                 <span className={`status-pill ${call.status === "success" ? "status-ok" : "status-error"}`}>
                   {call.status}
                 </span>

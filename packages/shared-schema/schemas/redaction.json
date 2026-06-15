@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-flight-recorder.dev/schemas/redaction.json",
+  "title": "RedactionConfig",
+  "type": "object",
+  "properties": {
+    "mode": { "type": "string", "enum": ["strict", "off"] },
+    "capture_mode": { "type": "string", "enum": ["metadata_only", "redacted", "full"] },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "action": { "type": "string", "enum": ["mask", "remove", "hash"] }
+        }
+      }
+    }
+  }
+}

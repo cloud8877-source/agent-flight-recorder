@@ -93,6 +93,40 @@ CREATE INDEX IF NOT EXISTS idx_spans_agent_run_id ON spans(agent_run_id);
 CREATE INDEX IF NOT EXISTS idx_model_calls_agent_run_id ON model_calls(agent_run_id);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_agent_run_id ON tool_calls(agent_run_id);
 
+CREATE TABLE IF NOT EXISTS replay_snapshots (
+  id TEXT PRIMARY KEY,
+  agent_run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+  snapshot_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS replay_runs (
+  id TEXT PRIMARY KEY,
+  source_agent_run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+  snapshot_id TEXT NOT NULL REFERENCES replay_snapshots(id),
+  mode TEXT NOT NULL DEFAULT 'exact',
+  status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'success', 'failed')),
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  result_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS eval_results (
+  id TEXT PRIMARY KEY,
+  agent_run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+  evaluator_name TEXT NOT NULL,
+  eval_type TEXT NOT NULL,
+  score REAL NOT NULL,
+  passed INTEGER NOT NULL,
+  result_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_replay_snapshots_run ON replay_snapshots(agent_run_id);
+CREATE INDEX IF NOT EXISTS idx_replay_runs_source ON replay_runs(source_agent_run_id);
+CREATE INDEX IF NOT EXISTS idx_eval_results_run ON eval_results(agent_run_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status);
+
 -- Default local project for development
 INSERT OR IGNORE INTO projects (id, name) VALUES ('proj_local', 'local');
 INSERT OR IGNORE INTO environments (id, project_id, name) VALUES ('env_dev', 'proj_local', 'development');

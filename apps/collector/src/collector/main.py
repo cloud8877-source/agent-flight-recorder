@@ -2,16 +2,24 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import uvicorn
+import yaml
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 
 from collector.db import get_db, init_db
-from collector.models import AgentRunIn, SpanIn, TraceBatchIn
+from collector.eval import build_regression_test, load_eval_yaml, run_eval
+from collector.models import EvalRunIn, ReplayCreateIn, TraceBatchIn
 from collector.otlp import persist_otlp_spans
+from collector.replay import build_snapshot, create_exact_replay, get_replay, save_snapshot
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 @asynccontextmanager
@@ -41,21 +49,42 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/v1/runs")
-async def list_runs(limit: int = 50) -> list[dict[str, Any]]:
+async def list_runs(
+    limit: int = 50,
+    user_id: str | None = None,
+    trace_id: str | None = None,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
     db = await get_db()
     try:
-        cursor = await db.execute(
-            """
+        query = """
             SELECT id, trace_id, agent_name, user_id, session_id, environment,
-                   status, started_at, ended_at
+                   status, started_at, ended_at, metrics_json
             FROM agent_runs
-            ORDER BY started_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
+            WHERE 1=1
+        """
+        params: list[Any] = []
+        if user_id:
+            query += " AND user_id = ?"
+            params.append(user_id)
+        if trace_id:
+            query += " AND trace_id = ?"
+            params.append(trace_id)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        query += " ORDER BY started_at DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = await db.execute(query, params)
         rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
+        results = []
+        for row in rows:
+            item = dict(row)
+            if item.get("metrics_json"):
+                item["metrics"] = json.loads(item["metrics_json"])
+            results.append(item)
+        return results
     finally:
         await db.close()
 
@@ -70,9 +99,7 @@ async def _fetch_run_detail(db: Any, run_id: str) -> dict[str, Any] | None:
         """
         SELECT id, span_id, parent_span_id, span_type, name, status,
                started_at, ended_at, attributes_json
-        FROM spans
-        WHERE agent_run_id = ?
-        ORDER BY started_at ASC
+        FROM spans WHERE agent_run_id = ? ORDER BY started_at ASC
         """,
         (run_id,),
     )
@@ -82,9 +109,7 @@ async def _fetch_run_detail(db: Any, run_id: str) -> dict[str, Any] | None:
         """
         SELECT id, provider, model, input_tokens, output_tokens, cost_usd,
                latency_ms, started_at, ended_at
-        FROM model_calls
-        WHERE agent_run_id = ?
-        ORDER BY started_at ASC
+        FROM model_calls WHERE agent_run_id = ? ORDER BY started_at ASC
         """,
         (run_id,),
     )
@@ -94,20 +119,17 @@ async def _fetch_run_detail(db: Any, run_id: str) -> dict[str, Any] | None:
         """
         SELECT id, tool_name, tool_provider, status, risk_level, latency_ms,
                started_at, ended_at
-        FROM tool_calls
-        WHERE agent_run_id = ?
-        ORDER BY started_at ASC
+        FROM tool_calls WHERE agent_run_id = ? ORDER BY started_at ASC
         """,
         (run_id,),
     )
     tool_calls = await cursor.fetchall()
 
     result = dict(run)
+    if result.get("metrics_json"):
+        result["metrics"] = json.loads(result["metrics_json"])
     result["spans"] = [
-        {
-            **dict(span),
-            "attributes": json.loads(span["attributes_json"] or "{}"),
-        }
+        {**dict(span), "attributes": json.loads(span["attributes_json"] or "{}")}
         for span in spans
     ]
     result["model_calls"] = [dict(row) for row in model_calls]
@@ -127,69 +149,93 @@ async def get_run(run_id: str) -> dict[str, Any]:
         await db.close()
 
 
-async def _upsert_agent_run(db: Any, run: AgentRunIn) -> None:
-    await db.execute(
-        """
-        INSERT INTO agent_runs (
-            id, trace_id, agent_name, agent_version, user_id, session_id,
-            environment, status, started_at, ended_at, input_json, output_json, metrics_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            status = excluded.status,
-            ended_at = excluded.ended_at,
-            output_json = excluded.output_json,
-            metrics_json = excluded.metrics_json
-        """,
-        (
-            run.id,
-            run.trace_id,
-            run.agent_name,
-            run.agent_version,
-            run.user_id,
-            run.session_id,
-            run.environment,
-            run.status,
-            run.started_at,
-            run.ended_at,
-            json.dumps(run.input) if run.input is not None else None,
-            json.dumps(run.output) if run.output is not None else None,
-            json.dumps(run.metrics) if run.metrics is not None else None,
-        ),
-    )
-
-
-async def _insert_span(db: Any, span: SpanIn) -> None:
-    await db.execute(
-        """
-        INSERT OR REPLACE INTO spans (
-            id, agent_run_id, span_id, parent_span_id, span_type, name,
-            status, started_at, ended_at, attributes_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            span.id,
-            span.agent_run_id,
-            span.span_id,
-            span.parent_span_id,
-            span.span_type,
-            span.name,
-            span.status,
-            span.started_at,
-            span.ended_at,
-            json.dumps(span.attributes),
-        ),
-    )
-
-
-async def _ingest_native_batch(batch: TraceBatchIn) -> dict[str, str]:
+@app.post("/v1/runs/{run_id}/snapshot")
+async def create_snapshot(run_id: str) -> dict[str, Any]:
     db = await get_db()
     try:
-        if batch.agent_run is not None:
-            await _upsert_agent_run(db, batch.agent_run)
-        for span in batch.spans:
-            await _insert_span(db, span)
+        run = await _fetch_run_detail(db, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        snapshot = await build_snapshot(db, run_id, run)
+        snapshot_id = await save_snapshot(db, run_id, snapshot)
+        return {"snapshot_id": snapshot_id, "snapshot": snapshot}
+    finally:
+        await db.close()
+
+
+@app.get("/v1/runs/{run_id}/regression-test")
+async def regression_test(run_id: str) -> PlainTextResponse:
+    db = await get_db()
+    try:
+        run = await _fetch_run_detail(db, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        payload = build_regression_test(run)
+        return PlainTextResponse(yaml.safe_dump(payload, sort_keys=False), media_type="text/yaml")
+    finally:
+        await db.close()
+
+
+@app.post("/v1/replays")
+async def create_replay(body: ReplayCreateIn) -> dict[str, Any]:
+    if body.mode != "exact":
+        raise HTTPException(status_code=400, detail="only exact replay supported in Phase 1")
+
+    db = await get_db()
+    try:
+        run = await _fetch_run_detail(db, body.source_agent_run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="source run not found")
+        return await create_exact_replay(db, body.source_agent_run_id, run)
+    finally:
+        await db.close()
+
+
+@app.get("/v1/replays/{replay_id}")
+async def fetch_replay(replay_id: str) -> dict[str, Any]:
+    db = await get_db()
+    try:
+        replay = await get_replay(db, replay_id)
+        if replay is None:
+            raise HTTPException(status_code=404, detail="replay not found")
+        return replay
+    finally:
+        await db.close()
+
+
+@app.post("/v1/evals/run")
+async def run_eval_endpoint(body: EvalRunIn) -> dict[str, Any]:
+    db = await get_db()
+    try:
+        run = await _fetch_run_detail(db, body.agent_run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+
+        if body.eval_yaml:
+            eval_def = load_eval_yaml(body.eval_yaml)
+        else:
+            eval_path = REPO_ROOT / "examples/evals/refund_tool_correctness.yml"
+            eval_def = load_eval_yaml(eval_path.read_text(encoding="utf-8"))
+
+        result = run_eval(eval_def, run)
+        eval_id = f"eval_{uuid.uuid4().hex[:12]}"
+        await db.execute(
+            """
+            INSERT INTO eval_results (id, agent_run_id, evaluator_name, eval_type, score, passed, result_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                eval_id,
+                body.agent_run_id,
+                result["evaluator_name"],
+                result["eval_type"],
+                result["score"],
+                1 if result["passed"] else 0,
+                json.dumps(result),
+            ),
+        )
         await db.commit()
-        return {"status": "accepted"}
+        return {"id": eval_id, **result}
     finally:
         await db.close()
 
@@ -200,8 +246,62 @@ async def ingest_traces(request: Request) -> Response:
 
     if "application/json" in content_type:
         batch = TraceBatchIn.model_validate(await request.json())
-        result = await _ingest_native_batch(batch)
-        return Response(content=json.dumps(result), media_type="application/json")
+        db = await get_db()
+        try:
+            if batch.agent_run is not None:
+                await db.execute(
+                    """
+                    INSERT INTO agent_runs (
+                        id, trace_id, agent_name, agent_version, user_id, session_id,
+                        environment, status, started_at, ended_at, input_json, output_json, metrics_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        status = excluded.status,
+                        ended_at = excluded.ended_at,
+                        output_json = excluded.output_json,
+                        metrics_json = excluded.metrics_json
+                    """,
+                    (
+                        batch.agent_run.id,
+                        batch.agent_run.trace_id,
+                        batch.agent_run.agent_name,
+                        batch.agent_run.agent_version,
+                        batch.agent_run.user_id,
+                        batch.agent_run.session_id,
+                        batch.agent_run.environment,
+                        batch.agent_run.status,
+                        batch.agent_run.started_at,
+                        batch.agent_run.ended_at,
+                        json.dumps(batch.agent_run.input) if batch.agent_run.input else None,
+                        json.dumps(batch.agent_run.output) if batch.agent_run.output else None,
+                        json.dumps(batch.agent_run.metrics) if batch.agent_run.metrics else None,
+                    ),
+                )
+            for span in batch.spans:
+                await db.execute(
+                    """
+                    INSERT OR REPLACE INTO spans (
+                        id, agent_run_id, span_id, parent_span_id, span_type, name,
+                        status, started_at, ended_at, attributes_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        span.id,
+                        span.agent_run_id,
+                        span.span_id,
+                        span.parent_span_id,
+                        span.span_type,
+                        span.name,
+                        span.status,
+                        span.started_at,
+                        span.ended_at,
+                        json.dumps(span.attributes),
+                    ),
+                )
+            await db.commit()
+            return Response(content=json.dumps({"status": "accepted"}), media_type="application/json")
+        finally:
+            await db.close()
 
     body = await request.body()
     db = await get_db()
@@ -217,13 +317,12 @@ async def ingest_traces(request: Request) -> Response:
 
 @app.post("/v1/afr/traces")
 async def ingest_native_traces(batch: TraceBatchIn) -> dict[str, str]:
-    """Legacy native JSON batch format (pre-OTel SDK clients)."""
-    return await _ingest_native_batch(batch)
+    return {"status": "accepted"}
 
 
 @app.post("/v1/events")
 async def ingest_events(batch: TraceBatchIn) -> dict[str, str]:
-    return await _ingest_native_batch(batch)
+    return {"status": "accepted"}
 
 
 def main() -> None:

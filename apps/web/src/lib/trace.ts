@@ -16,6 +16,7 @@ export type ModelCall = {
   model: string;
   input_tokens: number | null;
   output_tokens: number | null;
+  cost_usd: number | null;
   latency_ms: number | null;
 };
 
@@ -24,6 +25,13 @@ export type ToolCall = {
   tool_name: string;
   status: string;
   latency_ms: number | null;
+};
+
+export type RunMetrics = {
+  latency_ms?: number | null;
+  input_tokens?: number;
+  output_tokens?: number;
+  cost_usd?: number;
 };
 
 export type RunDetail = {
@@ -35,6 +43,7 @@ export type RunDetail = {
   ended_at: string | null;
   user_id: string | null;
   environment: string;
+  metrics?: RunMetrics;
   spans: Span[];
   model_calls: ModelCall[];
   tool_calls: ToolCall[];
@@ -52,6 +61,11 @@ export function formatDuration(ms: number | null): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+export function formatCost(usd: number | null | undefined): string {
+  if (usd === null || usd === undefined) return "—";
+  return `$${usd.toFixed(4)}`;
+}
+
 export function spanDuration(span: Span): number | null {
   const start = parseTime(span.started_at);
   const end = parseTime(span.ended_at);
@@ -60,6 +74,7 @@ export function spanDuration(span: Span): number | null {
 }
 
 export function runDuration(run: RunDetail): number | null {
+  if (run.metrics?.latency_ms != null) return run.metrics.latency_ms;
   const start = parseTime(run.started_at);
   const end = parseTime(run.ended_at);
   if (start === null || end === null) return null;
@@ -87,18 +102,15 @@ export function buildTimeline(spans: Span[]): TimelineNode[] {
   for (const node of nodes.values()) {
     const parentId = node.parent_span_id;
     const parent = parentId ? nodes.get(parentId) : undefined;
-    if (parent) {
-      parent.children.push(node);
-    } else {
-      roots.push(node);
-    }
+    if (parent) parent.children.push(node);
+    else roots.push(node);
   }
 
   const assignDepth = (node: TimelineNode, depth: number) => {
     node.depth = depth;
-    for (const child of node.children) assignDepth(child, depth + 1);
+    node.children.forEach((child) => assignDepth(child, depth + 1));
   };
-  for (const root of roots) assignDepth(root, 0);
+  roots.forEach((root) => assignDepth(root, 0));
 
   const sortTree = (node: TimelineNode) => {
     node.children.sort((a, b) => (parseTime(a.started_at) ?? 0) - (parseTime(b.started_at) ?? 0));
@@ -106,7 +118,6 @@ export function buildTimeline(spans: Span[]): TimelineNode[] {
   };
   roots.sort((a, b) => (parseTime(a.started_at) ?? 0) - (parseTime(b.started_at) ?? 0));
   roots.forEach(sortTree);
-
   return roots;
 }
 
@@ -128,4 +139,15 @@ export function statusClass(status: string): string {
   if (status === "error" || status === "failed") return "status-error";
   if (status === "running") return "status-running";
   return "status-ok";
+}
+
+export function collectErrors(spans: Span[]): string[] {
+  const errors: string[] = [];
+  for (const span of spans) {
+    if (span.status === "error") {
+      const msg = span.attributes["error.message"];
+      errors.push(typeof msg === "string" ? msg : `${span.name} failed`);
+    }
+  }
+  return errors;
 }

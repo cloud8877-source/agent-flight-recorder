@@ -10,6 +10,7 @@ class RecorderConfig:
     environment: str
     endpoint: str
     api_key: str | None
+    capture_mode: str
     capture_prompts: bool
     capture_responses: bool
     redaction_mode: str
@@ -19,11 +20,13 @@ _config: RecorderConfig | None = None
 
 
 def load_from_env(app_name: str, environment: str) -> RecorderConfig:
+    capture_mode = os.environ.get("AFR_CAPTURE_MODE", "redacted")
     return RecorderConfig(
         app_name=app_name,
         environment=environment,
         endpoint=os.environ.get("AFR_ENDPOINT", "http://localhost:4318").rstrip("/"),
         api_key=os.environ.get("AFR_API_KEY"),
+        capture_mode=capture_mode,
         capture_prompts=os.environ.get("AFR_CAPTURE_PROMPTS", "true").lower() == "true",
         capture_responses=os.environ.get("AFR_CAPTURE_RESPONSES", "true").lower() == "true",
         redaction_mode=os.environ.get("AFR_REDACTION_MODE", "strict"),

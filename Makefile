@@ -31,3 +31,7 @@ dev:
 lint:
 	pnpm lint
 	pnpm --filter @agent-flight-recorder/node run lint
+
+e2e: venv
+	chmod +x scripts/e2e.sh
+	./scripts/e2e.sh

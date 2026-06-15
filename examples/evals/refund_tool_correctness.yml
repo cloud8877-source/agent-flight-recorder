@@ -1,0 +1,9 @@
+name: refund_tool_correctness
+type: tool_correctness
+rules:
+  - tool_name: get_orders
+    must_only_be_called_when:
+      - tool.result.count == 2
+  - tool_name: refund_payment
+    must_only_be_called_when:
+      - tool.arguments.amount_usd == 49.99

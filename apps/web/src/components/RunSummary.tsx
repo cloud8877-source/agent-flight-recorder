@@ -1,12 +1,12 @@
-import { formatDuration, runDuration, statusClass, type RunDetail } from "@/lib/trace";
+import { formatCost, formatDuration, runDuration, statusClass, type RunDetail } from "@/lib/trace";
 
 export function RunSummary({ run }: { run: RunDetail }) {
   const duration = runDuration(run);
   const errorSpans = run.spans.filter((s) => s.status === "error").length;
-  const totalTokens = run.model_calls.reduce(
-    (sum, call) => sum + (call.input_tokens ?? 0) + (call.output_tokens ?? 0),
-    0,
-  );
+  const totalTokens = run.metrics
+    ? (run.metrics.input_tokens ?? 0) + (run.metrics.output_tokens ?? 0)
+    : run.model_calls.reduce((sum, call) => sum + (call.input_tokens ?? 0) + (call.output_tokens ?? 0), 0);
+  const totalCost = run.metrics?.cost_usd ?? run.model_calls.reduce((sum, call) => sum + (call.cost_usd ?? 0), 0);
 
   return (
     <div className="summary-grid">
@@ -17,6 +17,10 @@ export function RunSummary({ run }: { run: RunDetail }) {
       <div className="summary-card">
         <span className="summary-label">Duration</span>
         <strong>{formatDuration(duration)}</strong>
+      </div>
+      <div className="summary-card">
+        <span className="summary-label">Cost</span>
+        <strong>{formatCost(totalCost || null)}</strong>
       </div>
       <div className="summary-card">
         <span className="summary-label">Spans</span>
@@ -37,10 +41,6 @@ export function RunSummary({ run }: { run: RunDetail }) {
       <div className="summary-card">
         <span className="summary-label">Errors</span>
         <strong className={errorSpans > 0 ? "text-error" : ""}>{errorSpans}</strong>
-      </div>
-      <div className="summary-card">
-        <span className="summary-label">Environment</span>
-        <strong>{run.environment}</strong>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from agent_flight_recorder.attributes import (
     AFR_SPAN_TYPE,
 )
 from agent_flight_recorder.config import get_config, load_from_env, set_config
+from agent_flight_recorder.metrics import estimate_llm_cost_usd
+from agent_flight_recorder.redaction import apply_capture_mode
 from agent_flight_recorder.telemetry import force_flush, get_tracer, setup_telemetry
 
 
@@ -71,6 +74,7 @@ class SpanRecorder:
         self.attributes = attributes
         self._span: trace.Span | None = None
         self._token: object | None = None
+        self._started = time.perf_counter()
 
     def set_attribute(self, key: str, value: Any) -> None:
         if self._span is not None:
@@ -80,6 +84,25 @@ class SpanRecorder:
         if self._span is not None:
             self._span.record_exception(error)
             self._span.set_status(Status(StatusCode.ERROR, str(error)))
+            self.set_attribute("error.message", str(error))
+
+    def _finalize_metrics(self) -> None:
+        latency_ms = max(int((time.perf_counter() - self._started) * 1000), 0)
+        if self.span_type == "llm.call":
+            self.set_attribute("llm.latency_ms", latency_ms)
+            model = str(self.attributes.get("llm.model", ""))
+            input_tokens = self.attributes.get("llm.input_tokens")
+            output_tokens = self.attributes.get("llm.output_tokens")
+            if input_tokens is not None or output_tokens is not None:
+                cost = estimate_llm_cost_usd(
+                    model,
+                    int(input_tokens) if input_tokens is not None else None,
+                    int(output_tokens) if output_tokens is not None else None,
+                )
+                if cost is not None:
+                    self.set_attribute("llm.cost_usd", cost)
+        elif self.span_type == "tool.call":
+            self.set_attribute("tool.latency_ms", latency_ms)
 
     def __enter__(self) -> "SpanRecorder":
         config = get_config()
@@ -95,6 +118,7 @@ class SpanRecorder:
         if self.run.session_id:
             attrs[AFR_SESSION_ID] = self.run.session_id
         attrs.update(self.attributes)
+        attrs = apply_capture_mode(attrs, config.capture_mode, config.redaction_mode)
 
         tracer = get_tracer()
         self._span = tracer.start_span(self.name, attributes=attrs)
@@ -106,6 +130,7 @@ class SpanRecorder:
         if self._span is not None:
             if exc is not None and isinstance(exc, BaseException):
                 self.set_error(exc)
+            self._finalize_metrics()
             self._span.end()
         if self._token is not None:
             context.detach(self._token)
@@ -133,6 +158,7 @@ def agent_run(
         root_attrs["enduser.id"] = user_id
     if session_id:
         root_attrs[AFR_SESSION_ID] = session_id
+    root_attrs = apply_capture_mode(root_attrs, config.capture_mode, config.redaction_mode)
 
     with tracer.start_as_current_span(name, attributes=root_attrs) as root:
         ctx_span = trace.get_current_span()
