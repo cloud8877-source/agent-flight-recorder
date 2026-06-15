@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify markdown links
+        run: |
+          python3 <<'PY'
+          import re
+          from pathlib import Path
+
+          root = Path(".")
+          link_pattern = re.compile(r'\[([^\]]*)\]\(([^)]+)\)')
+          errors = []
+          for md in root.rglob("*.md"):
+              if ".git" in md.parts:
+                  continue
+              for _, target in link_pattern.findall(md.read_text()):
+                  if target.startswith(("http", "#")):
+                      continue
+                  path_part = target.split("#")[0]
+                  if not path_part:
+                      continue
+                  if not (md.parent / path_part).resolve().exists():
+                      errors.append(f"{md}: {target}")
+          if errors:
+              raise SystemExit("Broken links:\n" + "\n".join(errors))
+          print("All markdown links OK")
+          PY
+
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm --filter @agent-flight-recorder/node run lint
+      - run: pnpm --filter @agent-flight-recorder/node run build
+
+  python-collector:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m venv .venv
+          .venv/bin/pip install -e apps/collector -e packages/sdk-python
+      - run: .venv/bin/python -c "from collector.main import app; from agent_flight_recorder import recorder"

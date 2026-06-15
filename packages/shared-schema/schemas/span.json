@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-flight-recorder.dev/schemas/span.json",
+  "title": "AgentSpan",
+  "type": "object",
+  "required": ["id", "agent_run_id", "span_id", "span_type", "name", "status", "started_at"],
+  "properties": {
+    "id": { "type": "string" },
+    "agent_run_id": { "type": "string" },
+    "span_id": { "type": "string" },
+    "parent_span_id": { "type": ["string", "null"] },
+    "span_type": { "type": "string" },
+    "name": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "error"]
+    },
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": "string", "format": "date-time" },
+    "attributes": { "type": "object" }
+  },
+  "additionalProperties": true
+}

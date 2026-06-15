@@ -1,0 +1,29 @@
+services:
+  collector:
+    build:
+      context: ..
+      dockerfile: apps/collector/Dockerfile
+    ports:
+      - "4318:4318"
+    environment:
+      AFR_DATABASE_PATH: /data/afr.db
+      AFR_HOST: 0.0.0.0
+      AFR_PORT: 4318
+    volumes:
+      - afr_data:/data
+
+  web:
+    image: node:20-bookworm
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm install && pnpm --filter @agent-flight-recorder/web dev"
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_AFR_API_URL: http://collector:4318
+    volumes:
+      - ..:/app
+    depends_on:
+      - collector
+
+volumes:
+  afr_data:

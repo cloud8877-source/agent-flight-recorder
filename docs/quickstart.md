@@ -4,22 +4,31 @@ Get Agent Flight Recorder capturing agent runs locally in under five minutes.
 
 > Parent decision: [ADR-001](../adr/ADR-001-agent-flight-recorder.md)
 
-> **Note:** Application code (SDK, collector, UI) is not yet implemented. This guide describes the target Phase 1 developer experience from the architecture decision.
-
 ## Prerequisites
 
-- Python 3.11+ or Node.js 20+
-- Docker and Docker Compose (for local stack)
+- Python 3.11+ and Node.js 20+
+- pnpm 9+ (`corepack enable`)
+- Docker and Docker Compose (optional)
 
 ## 1. Start the Local Stack
 
-Once `infra/docker-compose.yml` exists:
-
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+cp .env.example .env
+make setup
+make dev
 ```
 
-This starts the collector, SQLite-backed storage, and web UI.
+Or without Docker:
+
+```bash
+make setup
+make db-init
+make collector   # terminal 1
+make web         # terminal 2
+make demo        # terminal 3
+```
+
+This starts the collector (SQLite), web UI, and records a demo agent run.
 
 ## 2. Configure Environment
 

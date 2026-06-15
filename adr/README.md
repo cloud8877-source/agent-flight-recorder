@@ -14,7 +14,7 @@ ADRs move through these states:
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [ADR-001](ADR-001-agent-flight-recorder.md) | Build an OpenTelemetry-Native Agent Flight Recorder | Proposed |
+| [ADR-001](ADR-001-agent-flight-recorder.md) | Build an OpenTelemetry-Native Agent Flight Recorder | Accepted |
 | [ADR-002](ADR-002-storage-strategy.md) | Storage Strategy for Agent Traces and Replay Data | Proposed (stub) |
 | [ADR-003](ADR-003-redaction-privacy.md) | Redaction and Privacy Model for Prompt/Response Logging | Proposed (stub) |
 | [ADR-004](ADR-004-evaluation-regression.md) | Evaluation and Regression Testing Strategy | Proposed (stub) |

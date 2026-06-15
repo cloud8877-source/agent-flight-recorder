@@ -1,0 +1,14 @@
+{
+  "name": "@agent-flight-recorder/shared-schema",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent Flight Recorder span types and JSON schemas",
+  "files": [
+    "schemas",
+    "span-types.json"
+  ],
+  "exports": {
+    "./span-types": "./span-types.json",
+    "./schemas/*": "./schemas/*"
+  }
+}

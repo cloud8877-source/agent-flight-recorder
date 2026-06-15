@@ -1,0 +1,33 @@
+.PHONY: setup dev collector web demo db-init lint venv
+
+VENV := .venv
+PYTHON := $(VENV)/bin/python
+PIP := $(VENV)/bin/pip
+
+venv:
+	test -d $(VENV) || python3 -m venv $(VENV)
+
+setup: venv
+	corepack enable
+	pnpm install
+	$(PIP) install -e apps/collector -e packages/sdk-python
+
+db-init: venv
+	mkdir -p data
+	AFR_DATABASE_PATH=./data/afr.db $(PYTHON) -c "import asyncio; from collector.db import init_db; asyncio.run(init_db())"
+
+collector: venv
+	AFR_DATABASE_PATH=./data/afr.db $(VENV)/bin/uvicorn collector.main:app --app-dir apps/collector/src --host 0.0.0.0 --port 4318 --reload
+
+web:
+	pnpm --filter @agent-flight-recorder/web dev
+
+demo: venv
+	AFR_ENDPOINT=http://localhost:4318 $(PYTHON) examples/support-refund-agent/main.py
+
+dev:
+	docker compose -f infra/docker-compose.yml up --build
+
+lint:
+	pnpm lint
+	pnpm --filter @agent-flight-recorder/node run lint

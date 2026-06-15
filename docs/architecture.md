@@ -169,13 +169,15 @@ Full list in [ADR-001 Section 11](../adr/ADR-001-agent-flight-recorder.md#11-age
 
 ## Technology Stack
 
-| Layer | Choices |
-|-------|---------|
+| Layer | Choice (Phase 1) |
+|-------|------------------|
 | SDKs | Python, TypeScript, OpenTelemetry libraries |
-| Backend | FastAPI or Node.js, background workers, OTLP HTTP |
-| Storage (local) | SQLite |
-| Storage (prod) | Postgres, ClickHouse, S3-compatible object storage |
-| Frontend | Next.js, React, Tailwind, TanStack Query |
+| Collector API | **FastAPI** (Python), OTLP HTTP + `/v1/traces` |
+| Monorepo | **pnpm workspaces** + Turborepo (JS), pip editable installs (Python) |
+| Storage (local) | **SQLite** — schema in [`infra/sqlite/schema.sql`](../infra/sqlite/schema.sql) |
+| Storage (prod) | Postgres, ClickHouse, S3-compatible object storage (Phase 4) |
+| Frontend | **Next.js**, React |
+| Shared contracts | [`packages/shared-schema`](../packages/shared-schema/) JSON schemas |
 | Deployment | Docker Compose (local/self-hosted), Helm (later) |
 
 ## Related Docs

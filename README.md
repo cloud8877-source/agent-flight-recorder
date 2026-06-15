@@ -47,7 +47,20 @@ await recorder.agentRun(
 );
 ```
 
-See [docs/quickstart.md](docs/quickstart.md) for environment variables, Docker Compose setup, and Phase 1 exit criteria.
+See [docs/quickstart.md](docs/quickstart.md) for full setup.
+
+### Run locally
+
+```bash
+cp .env.example .env
+make setup
+make dev
+```
+
+- Collector: http://localhost:4318/health
+- Web UI: http://localhost:3000
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for native (non-Docker) development.
 
 ## Documentation
 
@@ -97,6 +110,18 @@ ClickHouse/Postgres storage, hosted cloud, team accounts, SSO/RBAC, Slack alerts
 ## Key Architectural Bet
 
 > OpenTelemetry should be the **compatibility layer**, but agent-specific replay, evaluation, policy, and audit semantics should be the **differentiation layer**.
+
+## Repository layout
+
+```text
+apps/collector      FastAPI ingestion API
+apps/web            Next.js trace viewer
+packages/sdk-js     TypeScript SDK
+packages/sdk-python Python SDK
+packages/shared-schema  Span types and JSON schemas
+examples/           Demo agents
+infra/              Docker Compose and SQLite schema
+```
 
 ## License
 
