@@ -127,6 +127,45 @@ CREATE INDEX IF NOT EXISTS idx_replay_runs_source ON replay_runs(source_agent_ru
 CREATE INDEX IF NOT EXISTS idx_eval_results_run ON eval_results(agent_run_id);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status);
 
+CREATE TABLE IF NOT EXISTS policies (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  policy_yaml TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS policy_violations (
+  id TEXT PRIMARY KEY,
+  agent_run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+  policy_name TEXT NOT NULL,
+  rule_name TEXT,
+  action TEXT NOT NULL CHECK (action IN ('allow', 'warn', 'block', 'require_approval')),
+  severity TEXT NOT NULL DEFAULT 'medium',
+  tool_name TEXT,
+  span_id TEXT,
+  message TEXT NOT NULL,
+  details_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS approval_events (
+  id TEXT PRIMARY KEY,
+  agent_run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+  span_id TEXT,
+  tool_name TEXT,
+  event_type TEXT NOT NULL CHECK (event_type IN ('requested', 'granted', 'denied')),
+  status TEXT,
+  approved_by TEXT,
+  details_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_policy_violations_run ON policy_violations(agent_run_id);
+CREATE INDEX IF NOT EXISTS idx_policy_violations_severity ON policy_violations(severity);
+CREATE INDEX IF NOT EXISTS idx_approval_events_run ON approval_events(agent_run_id);
+
 -- Default local project for development
 INSERT OR IGNORE INTO projects (id, name) VALUES ('proj_local', 'local');
 INSERT OR IGNORE INTO environments (id, project_id, name) VALUES ('env_dev', 'proj_local', 'development');

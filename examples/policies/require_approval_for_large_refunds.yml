@@ -1,0 +1,16 @@
+name: require_approval_for_large_refunds
+description: Refunds above 500 USD require human approval.
+scope:
+  agents:
+    - refund-agent
+rules:
+  - name: large_refund_requires_approval
+    when:
+      tool_name: refund_payment
+      arguments:
+        amount_usd:
+          greater_than: 500
+    then:
+      action: require_approval
+      severity: high
+      message: Large refunds require manager approval before execution.

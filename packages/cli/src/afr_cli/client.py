@@ -38,6 +38,21 @@ class AFRClient:
             payload["eval_yaml"] = eval_yaml
         return self._post("/v1/evals/run", payload)
 
+    def list_policies(self) -> list[dict[str, Any]]:
+        return self._get("/v1/policies")
+
+    def load_policy(self, policy_yaml: str) -> dict[str, Any]:
+        return self._post("/v1/policies", {"policy_yaml": policy_yaml})
+
+    def policy_check(self, run_id: str) -> dict[str, Any]:
+        return self._post(f"/v1/runs/{run_id}/policy-check", {})
+
+    def list_violations(self, limit: int = 50) -> list[dict[str, Any]]:
+        return self._get("/v1/violations", params={"limit": limit})
+
+    def get_violations(self, run_id: str) -> list[dict[str, Any]]:
+        return self._get(f"/v1/runs/{run_id}/violations")
+
     def regression_yaml(self, run_id: str) -> str:
         response = httpx.get(
             f"{self.endpoint}/v1/runs/{run_id}/regression-test",

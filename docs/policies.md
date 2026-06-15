@@ -4,7 +4,7 @@ Detect risky, forbidden, or non-compliant agent behavior at capture time and dur
 
 > Parent decision: [ADR-001](../adr/ADR-001-agent-flight-recorder.md)
 
-Privacy and redaction details: [ADR-003](../adr/ADR-003-redaction-privacy.md) (stub).
+Privacy and redaction details: [ADR-003](../adr/ADR-003-redaction-privacy.md).
 
 ## Policy Result Types
 
@@ -101,11 +101,28 @@ The Policy screen shows:
 - **Should have:** basic policy checks, policy violation UI
 - **Could have:** advanced PII detection, MCP-specific governance, enterprise policy packs ([ADR-005](../adr/ADR-005-open-source-boundary.md))
 
+## Loading policies
+
+Policies in `examples/policies/` are seeded on collector startup. Load or update via API or CLI:
+
+```bash
+afr policy load examples/policies/require_approval_for_large_refunds.yml
+afr policy list
+afr policy check <run_id>   # exits 1 when violations exist
+```
+
+Trigger a violation locally:
+
+```bash
+make collector
+AFR_ENDPOINT=http://localhost:4318 python examples/support-refund-agent/policy_violation.py
+```
+
 ## Phase 3 Exit Criteria
 
-- Developer can define a policy in YAML
-- System detects a risky or forbidden tool call
-- UI clearly shows policy violations
+- [x] Developer can define a policy in YAML
+- [x] System detects a risky or forbidden tool call
+- [x] UI clearly shows policy violations (`/policies`, run detail banner)
 
 ## Related Docs
 

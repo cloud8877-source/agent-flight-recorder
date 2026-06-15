@@ -1,0 +1,11 @@
+name: warn_pii_in_output
+description: Warn when model output may contain PII or secrets.
+rules:
+  - name: pii_in_llm_response
+    when:
+      span_type: llm.call
+      output_contains_pii: true
+    then:
+      action: warn
+      severity: medium
+      message: Model output may contain PII or secrets.

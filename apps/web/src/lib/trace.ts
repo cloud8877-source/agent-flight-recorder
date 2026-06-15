@@ -24,7 +24,28 @@ export type ToolCall = {
   id: string;
   tool_name: string;
   status: string;
+  risk_level?: string | null;
   latency_ms: number | null;
+};
+
+export type PolicyViolation = {
+  id: string;
+  policy_name: string;
+  rule_name: string | null;
+  action: string;
+  severity: string;
+  tool_name: string | null;
+  span_id: string | null;
+  message: string;
+  details?: Record<string, unknown>;
+};
+
+export type ApprovalEvent = {
+  id: string;
+  tool_name: string | null;
+  event_type: string;
+  status: string | null;
+  approved_by: string | null;
 };
 
 export type RunMetrics = {
@@ -32,6 +53,10 @@ export type RunMetrics = {
   input_tokens?: number;
   output_tokens?: number;
   cost_usd?: number;
+  risk?: {
+    max_risk_level?: string;
+    policy_violations?: number;
+  };
 };
 
 export type RunDetail = {
@@ -47,6 +72,8 @@ export type RunDetail = {
   spans: Span[];
   model_calls: ModelCall[];
   tool_calls: ToolCall[];
+  policy_violations?: PolicyViolation[];
+  approval_events?: ApprovalEvent[];
 };
 
 export function parseTime(iso: string | null | undefined): number | null {

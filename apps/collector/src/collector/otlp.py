@@ -10,6 +10,7 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
 from opentelemetry.proto.common.v1.common_pb2 import AnyValue
 
 from collector.metrics import compute_run_metrics, enrich_span, estimate_cost_usd, span_latency_ms
+from collector.policy import evaluate_policies, load_policies_from_db, persist_policy_results
 from collector.redaction import redact_attributes
 
 AFR_SPAN_TYPE = "afr.span_type"
@@ -225,20 +226,24 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                     ),
                 )
             elif span_type == "tool.call":
+                from collector.risk import classify_tool_risk
+
+                tool_name = attrs.get("tool.name", span.get("name", "tool"))
                 await db.execute(
                     """
                     INSERT OR REPLACE INTO tool_calls (
                         id, agent_run_id, span_id, tool_name, tool_provider, status,
-                        latency_ms, started_at, ended_at, arguments_json, result_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        risk_level, latency_ms, started_at, ended_at, arguments_json, result_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         f"tc_{span_id}",
                         agent_run["id"],
                         span_id,
-                        attrs.get("tool.name", span.get("name", "tool")),
+                        tool_name,
                         attrs.get("tool.provider"),
                         "error" if span.get("status") == "error" else "success",
+                        classify_tool_risk(str(tool_name)),
                         latency,
                         span.get("started_at"),
                         span.get("ended_at"),
@@ -246,6 +251,29 @@ async def persist_otlp_spans(db: Any, body: bytes) -> int:
                         json.dumps({k: v for k, v in attrs.items() if k.startswith("tool.result.")}),
                     ),
                 )
+
+        cursor = await db.execute(
+            """
+            SELECT span_id, parent_span_id, span_type, name, status, started_at, ended_at, attributes_json
+            FROM spans WHERE agent_run_id = ? ORDER BY started_at ASC
+            """,
+            (agent_run["id"],),
+        )
+        all_spans = [
+            {
+                **dict(row),
+                "attributes": json.loads(row["attributes_json"] or "{}"),
+            }
+            for row in await cursor.fetchall()
+        ]
+
+        policies = await load_policies_from_db(db)
+        violations, approvals, tool_risk = evaluate_policies(
+            policies,
+            agent_run=agent_run,
+            spans=all_spans,
+        )
+        await persist_policy_results(db, agent_run["id"], violations, approvals, tool_risk)
 
     await db.commit()
     return stored

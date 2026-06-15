@@ -47,8 +47,12 @@ export default async function HomePage({
 
   return (
     <main>
+      <nav className="site-nav">
+        <a href="/">Runs</a>
+        <a href="/policies">Policies</a>
+      </nav>
       <h1>Agent Flight Recorder</h1>
-      <p className="muted">Phase 1 complete — trace, replay stub, eval stub, regression export</p>
+      <p className="muted">Trace, replay, eval, regression tests, and policy checks</p>
 
       <div className="card">
         <h2>Search runs</h2>

@@ -1,0 +1,13 @@
+name: block_forbidden_tools
+description: Block destructive account operations.
+scope:
+  agents:
+    - refund-agent
+rules:
+  - name: block_delete_account
+    when:
+      tool_name: delete_account
+    then:
+      action: block
+      severity: critical
+      message: delete_account is forbidden for support agents.

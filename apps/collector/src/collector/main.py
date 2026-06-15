@@ -17,6 +17,7 @@ from collector.db import get_db, init_db
 from collector.eval import build_regression_test, load_eval_yaml, run_eval
 from collector.models import EvalRunIn, ReplayCreateIn, TraceBatchIn
 from collector.otlp import persist_otlp_spans
+from collector.policy import evaluate_run_policies, load_policies_from_db, seed_default_policies, upsert_policy
 from collector.replay import build_snapshot, create_replay, get_replay, save_snapshot
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -25,6 +26,11 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_db()
+    db = await get_db()
+    try:
+        await seed_default_policies(db, REPO_ROOT / "examples/policies")
+    finally:
+        await db.close()
     yield
 
 
@@ -134,6 +140,33 @@ async def _fetch_run_detail(db: Any, run_id: str) -> dict[str, Any] | None:
     ]
     result["model_calls"] = [dict(row) for row in model_calls]
     result["tool_calls"] = [dict(row) for row in tool_calls]
+
+    cursor = await db.execute(
+        """
+        SELECT id, policy_name, rule_name, action, severity, tool_name, span_id, message, details_json, created_at
+        FROM policy_violations WHERE agent_run_id = ? ORDER BY created_at ASC
+        """,
+        (run_id,),
+    )
+    violations = await cursor.fetchall()
+    result["policy_violations"] = [
+        {**dict(row), "details": json.loads(row["details_json"] or "{}")}
+        for row in violations
+    ]
+
+    cursor = await db.execute(
+        """
+        SELECT id, span_id, tool_name, event_type, status, approved_by, details_json, created_at
+        FROM approval_events WHERE agent_run_id = ? ORDER BY created_at ASC
+        """,
+        (run_id,),
+    )
+    approvals = await cursor.fetchall()
+    result["approval_events"] = [
+        {**dict(row), "details": json.loads(row["details_json"] or "{}")}
+        for row in approvals
+    ]
+
     return result
 
 
@@ -210,6 +243,92 @@ async def fetch_replay(replay_id: str) -> dict[str, Any]:
         if replay is None:
             raise HTTPException(status_code=404, detail="replay not found")
         return replay
+    finally:
+        await db.close()
+
+
+@app.get("/v1/policies")
+async def list_policies() -> list[dict[str, Any]]:
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, name, description, enabled, created_at FROM policies ORDER BY name ASC"
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+    finally:
+        await db.close()
+
+
+@app.post("/v1/policies")
+async def load_policy(request: Request) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    db = await get_db()
+    try:
+        if "application/json" in content_type:
+            body = await request.json()
+            content = body.get("policy_yaml") or body.get("yaml")
+            if not content:
+                raise HTTPException(status_code=400, detail="policy_yaml required")
+        else:
+            content = (await request.body()).decode("utf-8")
+        try:
+            return await upsert_policy(db, content)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        await db.close()
+
+
+@app.get("/v1/runs/{run_id}/violations")
+async def get_run_violations(run_id: str) -> list[dict[str, Any]]:
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT id FROM agent_runs WHERE id = ?", (run_id,))
+        if await cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        cursor = await db.execute(
+            """
+            SELECT id, policy_name, rule_name, action, severity, tool_name, span_id, message, details_json, created_at
+            FROM policy_violations WHERE agent_run_id = ? ORDER BY severity DESC, created_at ASC
+            """,
+            (run_id,),
+        )
+        return [
+            {**dict(row), "details": json.loads(row["details_json"] or "{}")}
+            for row in await cursor.fetchall()
+        ]
+    finally:
+        await db.close()
+
+
+@app.post("/v1/runs/{run_id}/policy-check")
+async def policy_check(run_id: str) -> dict[str, Any]:
+    db = await get_db()
+    try:
+        run = await _fetch_run_detail(db, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return await evaluate_run_policies(db, run_id, run)
+    finally:
+        await db.close()
+
+
+@app.get("/v1/violations")
+async def list_violations(limit: int = 50) -> list[dict[str, Any]]:
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """
+            SELECT v.id, v.agent_run_id, v.policy_name, v.rule_name, v.action, v.severity,
+                   v.tool_name, v.message, v.created_at, r.agent_name
+            FROM policy_violations v
+            JOIN agent_runs r ON r.id = v.agent_run_id
+            ORDER BY v.created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [dict(row) for row in await cursor.fetchall()]
     finally:
         await db.close()
 

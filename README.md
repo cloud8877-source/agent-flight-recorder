@@ -72,6 +72,7 @@ Run CI regression tests (Phase 2):
 
 ```bash
 make test
+make policy-test
 ```
 
 CLI examples:
@@ -80,6 +81,8 @@ CLI examples:
 afr replay run_abc123 --model gpt-4.1-mini
 afr eval run examples/evals/refund_tool_correctness.yml --run-id run_abc123
 afr test ./examples/afr-tests/
+afr policy check <run_id>
+afr policy load examples/policies/require_approval_for_large_refunds.yml
 ```
 
 ## Documentation
@@ -124,7 +127,7 @@ ClickHouse/Postgres storage, hosted cloud, team accounts, SSO/RBAC, Slack alerts
 |-------|-------|---------------|
 | **1** | Local trace capture ✅ | Capture agent run locally; inspect model/tool calls; cost/latency/redaction/search/replay/eval; `make e2e` passes |
 | **2** | Replay & regression ✅ | `afr` CLI; model replay; `afr test` CI gate; GitHub Actions regression workflow |
-| **3** | Policy & risk | Define policies; detect risky/forbidden tool calls; violation UI |
+| **3** | Policy & risk ✅ | Policy YAML; tool risk + PII detection; violation UI; `make policy-test` |
 | **4** | Production storage & export | Postgres + ClickHouse + object storage; OTLP and third-party exporters |
 
 ## Key Architectural Bet

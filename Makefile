@@ -1,4 +1,4 @@
-.PHONY: setup dev collector web demo db-init lint venv test regression
+.PHONY: setup dev collector web demo db-init lint venv test regression policy-test
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -41,3 +41,7 @@ test: venv
 	./scripts/regression.sh
 
 regression: test
+
+policy-test: venv
+	chmod +x scripts/policy-e2e.sh
+	./scripts/policy-e2e.sh

@@ -331,3 +331,81 @@ code {
 .row-failed td {
   background: rgba(255, 107, 122, 0.05);
 }
+
+.policy-banner {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 197, 66, 0.35);
+  background: rgba(245, 197, 66, 0.08);
+}
+
+.violation-list {
+  margin: 0.65rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.violation-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  background: #0f1628;
+}
+
+.violation-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.action-pill,
+.severity-pill,
+.risk-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.action-require_approval,
+.action-block {
+  background: rgba(255, 107, 122, 0.15);
+  color: var(--error);
+}
+
+.action-warn {
+  background: rgba(245, 197, 66, 0.15);
+  color: var(--warn);
+}
+
+.severity-high,
+.risk-high,
+.risk-critical {
+  background: rgba(255, 107, 122, 0.15);
+  color: var(--error);
+}
+
+.severity-medium,
+.risk-medium {
+  background: rgba(245, 197, 66, 0.15);
+  color: var(--warn);
+}
+
+.severity-low,
+.risk-low {
+  background: rgba(62, 207, 142, 0.12);
+  color: var(--ok);
+}
+
+.site-nav {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}

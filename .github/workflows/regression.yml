@@ -24,3 +24,4 @@ jobs:
           .venv/bin/pip install -e apps/collector -e packages/sdk-python -e packages/cli
       - run: make test
       - run: make e2e
+      - run: make policy-test

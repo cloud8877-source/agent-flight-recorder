@@ -1,4 +1,5 @@
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { PolicyViolations } from "@/components/PolicyViolations";
 import { RunActions } from "@/components/RunActions";
 import { RunSummary } from "@/components/RunSummary";
 import { Timeline } from "@/components/Timeline";
@@ -33,15 +34,17 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
 
   return (
     <main>
-      <p className="muted">
-        <a href="/">← Back to runs</a>
-      </p>
+      <nav className="site-nav">
+        <a href="/">Runs</a>
+        <a href="/policies">Policies</a>
+      </nav>
       <h1>{run.agent_name}</h1>
       <p className="muted">
         {run.id} · user {run.user_id ?? "—"} · trace {run.trace_id}
       </p>
 
       <ErrorBanner run={run} />
+      <PolicyViolations run={run} />
       <RunSummary run={run} />
       <RunActions runId={run.id} apiUrl={apiUrl} />
 
@@ -64,6 +67,9 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
               <div key={call.id} className="call-chip type-tool-call">
                 <span className="call-type">tool</span>
                 <span>{call.tool_name}</span>
+                {call.risk_level && (
+                  <span className={`risk-pill risk-${call.risk_level}`}>{call.risk_level} risk</span>
+                )}
                 <span className="muted">{call.latency_ms ?? "—"}ms</span>
                 <span className={`status-pill ${call.status === "success" ? "status-ok" : "status-error"}`}>
                   {call.status}

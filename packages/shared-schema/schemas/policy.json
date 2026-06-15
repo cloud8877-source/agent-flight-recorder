@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-flight-recorder.dev/schemas/policy.json",
+  "title": "Policy",
+  "type": "object",
+  "required": ["name", "rules"],
+  "properties": {
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "agents": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["when", "then"],
+        "properties": {
+          "name": { "type": "string" },
+          "when": { "type": "object" },
+          "then": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "enum": ["allow", "warn", "block", "require_approval"]
+              },
+              "severity": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

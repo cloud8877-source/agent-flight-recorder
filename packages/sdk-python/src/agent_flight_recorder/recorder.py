@@ -181,3 +181,32 @@ def agent_run(
             raise
         finally:
             force_flush()
+
+
+@contextmanager
+def human_approval(
+    run: AgentRun,
+    tool_name: str,
+    *,
+    status: str = "requested",
+    approved_by: str | None = None,
+) -> Generator[SpanRecorder, None, None]:
+    event = "requested"
+    if status in {"granted", "approved"}:
+        event = "granted"
+        status = "approved"
+    elif status == "denied":
+        event = "denied"
+
+    with run.span(
+        f"approval:{tool_name}",
+        "human.approval",
+        attributes={
+            "tool.name": tool_name,
+            "approval.event": f"human.approval.{event}",
+            "approval.status": status,
+        },
+    ) as span:
+        if approved_by:
+            span.set_attribute("approval.approved_by", approved_by)
+        yield span

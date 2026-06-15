@@ -116,6 +116,32 @@ def cmd_test(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_policy_list(args: argparse.Namespace) -> int:
+    client = AFRClient(args.endpoint)
+    policies = client.list_policies()
+    for policy in policies:
+        print(f"{policy['name']}\t{policy.get('description') or ''}")
+    print(f"{len(policies)} policies")
+    return 0
+
+
+def cmd_policy_load(args: argparse.Namespace) -> int:
+    client = AFRClient(args.endpoint)
+    content = Path(args.yaml_file).read_text(encoding="utf-8")
+    result = client.load_policy(content)
+    print(f"loaded {result['name']} ({result['id']})")
+    return 0
+
+
+def cmd_policy_check(args: argparse.Namespace) -> int:
+    client = AFRClient(args.endpoint)
+    result = client.policy_check(args.run_id)
+    print(f"violations={result.get('violation_count', 0)}")
+    for violation in result.get("violations") or []:
+        print(f"  [{violation['severity']}] {violation['action']}: {violation['message']}")
+    return 1 if result.get("violation_count") else 0
+
+
 def cmd_export_regression(args: argparse.Namespace) -> int:
     client = AFRClient(args.endpoint)
     content = client.regression_yaml(args.run_id)
@@ -158,6 +184,17 @@ def build_parser() -> argparse.ArgumentParser:
     export_regression.add_argument("run_id", help="agent_run id")
     export_regression.add_argument("-o", "--output", help="output file path")
     export_regression.set_defaults(func=cmd_export_regression)
+
+    policy = sub.add_parser("policy", help="Policy management and checks")
+    policy_sub = policy.add_subparsers(dest="policy_command", required=True)
+    policy_list = policy_sub.add_parser("list", help="List loaded policies")
+    policy_list.set_defaults(func=cmd_policy_list)
+    policy_load = policy_sub.add_parser("load", help="Load or update a policy YAML")
+    policy_load.add_argument("yaml_file", help="path to policy YAML")
+    policy_load.set_defaults(func=cmd_policy_load)
+    policy_check = policy_sub.add_parser("check", help="Re-run policy checks for a run")
+    policy_check.add_argument("run_id", help="agent_run id")
+    policy_check.set_defaults(func=cmd_policy_check)
 
     return parser
 

@@ -1696,19 +1696,24 @@ Exit criteria (met):
 
 ## Phase 3: Policy and Risk Layer
 
-Build:
+**Status: Complete** (2026-06-16)
 
-* Policy YAML format.
-* Tool risk classification.
-* PII/secret detection.
-* Policy violation UI.
-* Human approval event tracking.
+Built:
 
-Exit criteria:
+* Policy YAML format (`examples/policies/`, `packages/shared-schema/schemas/policy.json`).
+* Policy engine on OTLP ingest (`collector/policy.py`) with `allow`, `warn`, `block`, `require_approval`.
+* Tool risk classification (`collector/risk.py`) stored on `tool_calls.risk_level`.
+* PII/secret detection in model outputs (reuses redaction patterns).
+* Policy violation UI (`PolicyViolations`, `/policies` page, risk badges on tool calls).
+* Human approval span tracking (`human.approval` spans, `approval_events` table, SDK `human_approval()`).
+* APIs: `GET/POST /v1/policies`, `GET /v1/violations`, `GET /v1/runs/{id}/violations`, `POST /v1/runs/{id}/policy-check`.
+* CLI: `afr policy list|load|check`. `make policy-test` verification script.
 
-* Developer can define a policy.
-* System can detect a risky or forbidden tool call.
-* UI clearly shows policy violations.
+Exit criteria (met):
+
+* Developer can define a policy in YAML.
+* System detects a risky or forbidden tool call (demo: `policy_violation.py`).
+* UI clearly shows policy violations on run detail and policies dashboard.
 
 ---
 
