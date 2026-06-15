@@ -100,4 +100,6 @@ ClickHouse/Postgres storage, hosted cloud, team accounts, SSO/RBAC, Slack alerts
 
 ## License
 
-TBD
+[Apache License 2.0](LICENSE).
+
+You may self-host, modify, and embed the SDKs in proprietary applications. A separate hosted or enterprise offering (SSO, RBAC, managed retention, support SLAs) may be offered commercially without restricting the open-source core. See [ADR-005](adr/ADR-005-open-source-boundary.md).
